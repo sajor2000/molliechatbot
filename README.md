@@ -37,6 +37,9 @@ This project now supports **serverless deployment to Vercel** with MongoDB Atlas
 **Quick Links:**
 - 📘 [Full Deployment Guide](./VERCEL_DEPLOYMENT.md) - Complete setup instructions
 - ⚡ [Quick Start Guide](./QUICK_START.md) - Get deployed in 5 minutes
+- 💬 [Chat History Setup](./CHAT_HISTORY_SETUP.md) - Email summaries & conversation storage
+- 🚀 [Quick Start: Chat History](./QUICK_START_CHAT_HISTORY.md) - 5-minute email setup
+- 🔒 [Security Review Phase 2](./CODE_REVIEW_PHASE2.md) - Production security audit
 - 🏗️ Traditional deployment instructions below
 
 ## Features ✨
