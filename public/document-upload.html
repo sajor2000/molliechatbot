@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document Upload - RAG Pipeline</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 600px;
+      width: 100%;
+      padding: 40px;
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+
+    .form-group {
+      margin-bottom: 25px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: #333;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    input[type="password"],
+    input[type="file"] {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .file-info {
+      margin-top: 10px;
+      padding: 10px;
+      background: #f5f5f5;
+      border-radius: 6px;
+      font-size: 13px;
+      color: #666;
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      border-top-color: transparent;
+      animation: spin 0.6s linear infinite;
+      margin-right: 8px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .result {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 8px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .result.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+      display: block;
+    }
+
+    .result.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+      display: block;
+    }
+
+    .supported-formats {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 2px solid #e0e0e0;
+    }
+
+    .supported-formats h3 {
+      font-size: 16px;
+      color: #333;
+      margin-bottom: 10px;
+    }
+
+    .formats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .format-badge {
+      padding: 8px 12px;
+      background: #f0f0f0;
+      border-radius: 6px;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: #667eea;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📄 Document Upload</h1>
+    <p class="subtitle">Add documents to your RAG knowledge base</p>
+
+    <form id="uploadForm">
+      <div class="form-group">
+        <label for="adminKey">Admin Key</label>
+        <input
+          type="password"
+          id="adminKey"
+          placeholder="Enter your admin key"
+          required
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="fileInput">Select Document</label>
+        <input
+          type="file"
+          id="fileInput"
+          accept=".pdf,.md,.markdown,.txt"
+          required
+        />
+        <div class="file-info" id="fileInfo" style="display: none;"></div>
+      </div>
+
+      <button type="submit" id="submitBtn">
+        <span id="buttonText">Upload & Process</span>
+      </button>
+    </form>
+
+    <div class="result" id="result"></div>
+
+    <div class="supported-formats">
+      <h3>Supported Formats</h3>
+      <div class="formats-grid">
+        <div class="format-badge">📄 PDF</div>
+        <div class="format-badge">📝 Markdown</div>
+        <div class="format-badge">📃 Text</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('uploadForm');
+    const fileInput = document.getElementById('fileInput');
+    const fileInfo = document.getElementById('fileInfo');
+    const submitBtn = document.getElementById('submitBtn');
+    const buttonText = document.getElementById('buttonText');
+    const result = document.getElementById('result');
+
+    // Show file info when file is selected
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+        fileInfo.textContent = `Selected: ${file.name} (${sizeMB} MB)`;
+        fileInfo.style.display = 'block';
+      } else {
+        fileInfo.style.display = 'none';
+      }
+    });
+
+    // Handle form submission
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const adminKey = document.getElementById('adminKey').value;
+      const file = fileInput.files[0];
+
+      if (!file) {
+        showResult('Please select a file', 'error');
+        return;
+      }
+
+      // Check file size (10MB limit)
+      if (file.size > 10 * 1024 * 1024) {
+        showResult('File size must be less than 10MB', 'error');
+        return;
+      }
+
+      // Show loading state
+      submitBtn.disabled = true;
+      buttonText.innerHTML = '<span class="spinner"></span>Processing...';
+      result.style.display = 'none';
+
+      try {
+        // Read file as base64
+        const fileData = await readFileAsBase64(file);
+
+        // Send to API
+        const response = await fetch('/api/admin/documents/process', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-key': adminKey,
+          },
+          body: JSON.stringify({
+            file: fileData,
+            filename: file.name,
+            adminKey: adminKey,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          showResult(
+            `✅ Success! Created ${data.chunks} vectors from ${file.name}`,
+            'success'
+          );
+          form.reset();
+          fileInfo.style.display = 'none';
+        } else {
+          showResult(`❌ Error: ${data.message || data.error}`, 'error');
+        }
+
+      } catch (error) {
+        console.error('Upload error:', error);
+        showResult('❌ Upload failed. Check console for details.', 'error');
+      } finally {
+        // Reset button state
+        submitBtn.disabled = false;
+        buttonText.textContent = 'Upload & Process';
+      }
+    });
+
+    function readFileAsBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          // Remove data URL prefix and get only base64 data
+          const base64 = reader.result.split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function showResult(message, type) {
+      result.textContent = message;
+      result.className = `result ${type}`;
+      result.style.display = 'block';
+    }
+  </script>
+</body>
+</html>

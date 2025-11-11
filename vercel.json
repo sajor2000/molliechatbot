@@ -48,12 +48,20 @@
       "dest": "/api/admin/documents/delete.ts"
     },
     {
+      "src": "/api/admin/documents/process",
+      "dest": "/api/admin/documents/process.ts"
+    },
+    {
       "src": "/admin",
       "dest": "/admin.html"
     },
     {
       "src": "/test-chat",
       "dest": "/test-chat.html"
+    },
+    {
+      "src": "/document-upload",
+      "dest": "/document-upload.html"
     }
   ],
   "crons": [

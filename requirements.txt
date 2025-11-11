@@ -1,18 +1,12 @@
-# Docling - Document processing for AI/RAG applications
-# Official documentation: https://docling-project.github.io/docling/
-docling>=2.0.0
-
-# LangChain integration for Docling
-langchain-docling>=0.1.0
-
-# Additional dependencies for enhanced processing
-# Uncomment if needed for specific features:
-
-# For OCR support (optional)
-# docling[easyocr]>=2.0.0
-
-# For Vision-Language Models (optional, requires significant compute)
-# docling[vlm]>=2.0.0
-
-# For audio processing (optional)
-# docling[asr]>=2.0.0
+# Python dependencies for Vercel deployment
+#
+# IMPORTANT: Vercel serverless functions have a 250MB size limit.
+# Heavy ML packages (docling, torch, transformers) CANNOT be deployed.
+#
+# Alternative solutions for document processing:
+# 1. Use Vercel's built-in capabilities with Node.js libraries
+# 2. Use external APIs (OpenAI, Anthropic) for document parsing
+# 3. Deploy document processing separately on Modal, AWS Lambda with layers, or dedicated servers
+# 4. Pre-process documents locally and upload embeddings directly
+#
+# This file is intentionally minimal to allow Vercel deployment to succeed.
