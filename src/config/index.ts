@@ -83,6 +83,8 @@ export const config = {
   openrouter: {
     apiKey: process.env.OPENROUTER_API_KEY || '',
     model: process.env.OPENROUTER_MODEL || 'anthropic/claude-3.5-sonnet',
+    embeddingModel: process.env.EMBEDDING_MODEL || 'text-embedding-3-large',
+    embeddingDimensions: parseInt(process.env.EMBEDDING_DIMENSIONS || '1024', 10),
   },
 };
 
