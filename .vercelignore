@@ -1,0 +1,38 @@
+# Python dependencies (used for local document preprocessing only)
+# These are NOT needed for serverless deployment
+requirements.txt
+venv/
+*.pyc
+__pycache__/
+
+# Development files
+.env
+.env.local
+.env.*.local
+
+# Scripts directory (local processing only)
+src/scripts/
+
+# Processed data (already uploaded to Pinecone)
+processed-chunks.json
+chunk-analysis-report.json
+data/processed/
+
+# Logs
+logs/
+*.log
+
+# Tests
+tests/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
