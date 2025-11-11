@@ -46,7 +46,7 @@ export function initSentry(): void {
       attachStacktrace: true,
 
       // Filter out sensitive information
-      beforeSend(event, hint) {
+      beforeSend(event: Sentry.Event, hint: Sentry.EventHint) {
         // Remove sensitive headers
         if (event.request?.headers) {
           delete event.request.headers['authorization'];
@@ -56,9 +56,11 @@ export function initSentry(): void {
 
         // Remove sensitive query parameters
         if (event.request?.query_string) {
-          const sanitized = event.request.query_string
-            .replace(/([?&])(api_?key|token|secret|password)=[^&]*/gi, '$1$2=REDACTED');
-          event.request.query_string = sanitized;
+          if (typeof event.request.query_string === 'string') {
+            const sanitized = event.request.query_string
+              .replace(/([?&])(api_?key|token|secret|password)=[^&]*/gi, '$1$2=REDACTED');
+            event.request.query_string = sanitized;
+          }
         }
 
         return event;
@@ -104,7 +106,7 @@ export function captureException(
   }
 
   try {
-    Sentry.withScope((scope) => {
+    Sentry.withScope((scope: Sentry.Scope) => {
       // Add tags
       if (context?.tags) {
         Object.entries(context.tags).forEach(([key, value]) => {
@@ -155,7 +157,7 @@ export function captureMessage(
   }
 
   try {
-    return Sentry.withScope((scope) => {
+    return Sentry.withScope((scope: Sentry.Scope) => {
       if (context?.tags) {
         Object.entries(context.tags).forEach(([key, value]) => {
           scope.setTag(key, value);
