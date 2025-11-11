@@ -1,11 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { supabaseDatabaseService } from '../../src/services/supabase-database.service';
-import { activeSessions } from './webhook';
-
-// ⚠️ WARNING: Shared session storage imported from webhook.ts
-// This only works if both functions are in the same container instance.
-// In production with cold starts, sessions may not be found.
-// Implement Vercel KV, Redis, or Supabase for reliable session persistence.
+import { kvSessionService } from '../../src/services/kv-session.service';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Only allow POST requests
@@ -20,17 +15,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Session ID is required' });
     }
 
-    const conversation = activeSessions.get(sessionId);
+    // Retrieve and end session from KV storage
+    const conversation = await kvSessionService.endSession(sessionId);
 
     if (conversation) {
-      conversation.endTime = new Date();
+      // Save to Supabase for permanent storage
       await supabaseDatabaseService.saveConversation(conversation);
-      activeSessions.delete(sessionId);
     }
 
     return res.status(200).json({ success: true });
   } catch (error) {
     console.error('Error ending session:', error);
+
+    // Hide internal error details in production
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(500).json({
+        error: 'Failed to end session'
+      });
+    }
+
     return res.status(500).json({
       error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error'

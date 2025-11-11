@@ -1,81 +1,36 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { randomBytes } from 'crypto';
-
-// Simple in-memory token store (for serverless, this resets on each cold start)
-// For production, consider using Redis or database storage
-const activeTokens = new Map<string, { expires: number }>();
+import { kvAuthService } from '../services/kv-auth.service';
 
 export interface AuthRequest extends VercelRequest {
   authenticated?: boolean;
 }
 
 /**
- * Generate a secure random token
+ * Generate a secure random token and store in KV
  */
-export function generateToken(): string {
-  return randomBytes(32).toString('hex');
+export async function generateToken(): Promise<string> {
+  return await kvAuthService.generateToken();
 }
 
 /**
- * Verify admin password
+ * Verify admin password using bcrypt
  */
-export function verifyPassword(password: string): boolean {
-  const adminPassword = process.env.ADMIN_PASSWORD;
-
-  if (!adminPassword) {
-    console.error('⚠️  ADMIN_PASSWORD not configured in environment variables');
-    return false;
-  }
-
-  return password === adminPassword;
-}
-
-/**
- * Store token with expiration (24 hours)
- */
-export function storeToken(token: string): void {
-  const expiresIn = 24 * 60 * 60 * 1000; // 24 hours
-  activeTokens.set(token, {
-    expires: Date.now() + expiresIn,
-  });
+export async function verifyPassword(password: string): Promise<boolean> {
+  return await kvAuthService.verifyPassword(password);
 }
 
 /**
  * Verify token is valid and not expired
  */
-export function verifyToken(token: string): boolean {
-  const tokenData = activeTokens.get(token);
-
-  if (!tokenData) {
-    return false;
-  }
-
-  // Check if expired
-  if (Date.now() > tokenData.expires) {
-    activeTokens.delete(token);
-    return false;
-  }
-
-  return true;
+export async function verifyToken(token: string): Promise<boolean> {
+  return await kvAuthService.verifyToken(token);
 }
 
 /**
  * Revoke a token
  */
-export function revokeToken(token: string): void {
-  activeTokens.delete(token);
-}
-
-/**
- * Clean up expired tokens (called periodically)
- */
-export function cleanupExpiredTokens(): void {
-  const now = Date.now();
-  for (const [token, data] of activeTokens.entries()) {
-    if (now > data.expires) {
-      activeTokens.delete(token);
-    }
-  }
+export async function revokeToken(token: string): Promise<boolean> {
+  return await kvAuthService.revokeToken(token);
 }
 
 /**
@@ -97,7 +52,8 @@ export function requireAuth(
 
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
-    if (!verifyToken(token)) {
+    const isValid = await verifyToken(token);
+    if (!isValid) {
       return res.status(401).json({
         error: 'Unauthorized',
         message: 'Invalid or expired token'

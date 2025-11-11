@@ -5,19 +5,10 @@ import { openaiService } from '../../src/services/openai.service';
 import { cohereService } from '../../src/services/cohere.service';
 import { ChatMessage, Conversation } from '../../src/types';
 import { getBusinessHoursMessage } from '../../src/utils/business-hours';
+import { kvSessionService } from '../../src/services/kv-session.service';
+import { rateLimitChat } from '../../src/middleware/rate-limit.middleware';
 
-// ⚠️ WARNING: In-memory session storage will NOT persist across serverless function invocations!
-// Each cold start creates a new Map instance, losing all session data.
-// For production, implement persistent storage using Vercel KV, Redis, or Supabase:
-// - Install: npm install @vercel/kv
-// - Replace Map with: await kv.set(`session:${id}`, conversation)
-// - Retrieve with: await kv.get(`session:${id}`)
-const activeSessions = new Map<string, Conversation>();
-
-// Export for use in end-session endpoint
-export { activeSessions };
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+async function handler(req: VercelRequest, res: VercelResponse) {
   // Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -32,8 +23,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    // Get or create conversation
-    let conversation = activeSessions.get(convId);
+    // Get or create conversation from KV storage
+    let conversation = await kvSessionService.getSession(convId);
 
     if (!conversation) {
       conversation = {
@@ -46,7 +37,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           sessionId: convId,
         },
       };
-      activeSessions.set(convId, conversation);
     }
 
     // Add user message
@@ -116,8 +106,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
     conversation.messages.push(assistantMessage);
 
-    // Update session
-    activeSessions.set(convId, conversation);
+    // Save conversation to KV storage with 1-hour TTL
+    await kvSessionService.setSession(convId, conversation);
 
     // RAG BEST PRACTICE 5: Return confidence information with reranking scores
     const avgScore = finalMatches.length > 0
@@ -154,10 +144,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 }
 
+// Apply rate limiting: 30 messages per minute
+export default rateLimitChat(handler);
+
 // Configure API route
 export const config = {
   maxDuration: 30, // 30 seconds for chat responses
 };
-
-// Export sessions for other routes to access
-export { activeSessions };

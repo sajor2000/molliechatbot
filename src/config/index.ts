@@ -23,6 +23,9 @@ function validateProductionEnv(): void {
     'SUPABASE_URL',
     'SUPABASE_KEY',
     'CRON_SECRET',
+    'ADMIN_PASSWORD_HASH',
+    'KV_REST_API_URL',
+    'KV_REST_API_TOKEN',
   ];
 
   const missing = required.filter(key => !process.env[key]);
