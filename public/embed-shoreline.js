@@ -1,5 +1,5 @@
 /**
- * Shoreline Dental Chicago - Chat Widget Embed Script
+ * Shoreline Dental Chicago - Chat Widget Embed Script (Modernized UI/UX)
  *
  * Usage: Add this script tag to your website before the closing </body> tag:
  * <script src="https://your-production-domain.com/embed-shoreline.js"></script>
@@ -22,8 +22,12 @@
     brandName: 'Shoreline Dental Chicago',
     brandColor: '#2C5F8D', // Professional dental blue
     accentColor: '#4A90A4', // Lighter blue for hover states
-    welcomeMessage: '👋 Welcome to Shoreline Dental Chicago! How can we help you today?',
+    goldAccent: '#C9A961', // Gold for CTA buttons
+    welcomeMessage: '👋 Hello! What can I do for you today?',
     position: 'bottom-right', // 'bottom-right' or 'bottom-left'
+    suggestedActions: [
+      'I\\'d like to schedule an appointment'
+    ]
   }, window.SHORELINE_CHAT_CONFIG || {});
 
   // Generate unique session ID
@@ -117,10 +121,19 @@
       flex-direction: column;
       overflow: hidden;
       animation: slideUp 0.3s ease-out;
+      transition: all 0.3s ease;
     }
 
     #shoreline-chat-window.active {
       display: flex;
+    }
+
+    #shoreline-chat-window.expanded {
+      width: 90vw;
+      max-width: 1200px;
+      height: 90vh;
+      right: 50%;
+      transform: translateX(50%);
     }
 
     @keyframes slideUp {
@@ -144,6 +157,10 @@
       border-radius: 20px 20px 0 0;
     }
 
+    .shoreline-chat-header-content {
+      flex: 1;
+    }
+
     .shoreline-chat-header-content h3 {
       margin: 0;
       font-size: 18px;
@@ -157,24 +174,55 @@
       opacity: 0.9;
     }
 
-    .shoreline-chat-close {
+    .shoreline-chat-header-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .shoreline-header-button {
       background: rgba(255, 255, 255, 0.2);
       border: none;
       color: white;
       cursor: pointer;
-      font-size: 24px;
-      line-height: 1;
       width: 32px;
       height: 32px;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: background 0.2s;
+      transition: all 0.2s;
+      position: relative;
     }
 
-    .shoreline-chat-close:hover {
+    .shoreline-header-button:hover {
       background: rgba(255, 255, 255, 0.3);
+      transform: scale(1.1);
+    }
+
+    .shoreline-header-button svg {
+      width: 18px;
+      height: 18px;
+      fill: white;
+    }
+
+    .shoreline-header-button .tooltip {
+      position: absolute;
+      bottom: -32px;
+      right: 0;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+
+    .shoreline-header-button:hover .tooltip {
+      opacity: 1;
     }
 
     .shoreline-chat-messages {
@@ -200,6 +248,9 @@
     .shoreline-message {
       margin-bottom: 16px;
       animation: fadeIn 0.3s ease-out;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
     }
 
     @keyframes fadeIn {
@@ -207,23 +258,42 @@
       to { opacity: 1; transform: translateY(0); }
     }
 
+    .shoreline-message.user {
+      flex-direction: row-reverse;
+    }
+
+    .shoreline-message-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: ${CONFIG.accentColor};
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 16px;
+    }
+
+    .shoreline-message.user .shoreline-message-avatar {
+      background: ${CONFIG.brandColor};
+    }
+
+    .shoreline-message-wrapper {
+      flex: 1;
+      max-width: 75%;
+    }
+
     .shoreline-message-content {
       padding: 14px 18px;
       border-radius: 16px;
-      max-width: 85%;
       word-wrap: break-word;
       line-height: 1.5;
       font-size: 15px;
     }
 
-    .shoreline-message.user {
-      text-align: right;
-    }
-
     .shoreline-message.user .shoreline-message-content {
       background: ${CONFIG.brandColor};
       color: white;
-      margin-left: auto;
       border-bottom-right-radius: 4px;
     }
 
@@ -239,6 +309,40 @@
       color: #9ca3af;
       margin-top: 6px;
       padding: 0 4px;
+    }
+
+    .shoreline-suggested-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    .shoreline-suggested-action {
+      background: white;
+      border: 2px solid ${CONFIG.accentColor};
+      color: ${CONFIG.brandColor};
+      padding: 12px 18px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s;
+      text-align: center;
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .shoreline-suggested-action:hover {
+      background: ${CONFIG.accentColor};
+      color: white;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(74, 144, 164, 0.3);
+    }
+
+    .shoreline-suggested-action:active {
+      transform: translateY(0);
     }
 
     .shoreline-typing {
@@ -306,27 +410,40 @@
     }
 
     #shoreline-send-button {
-      padding: 14px 20px;
+      width: 44px;
+      height: 44px;
       background: ${CONFIG.brandColor};
       color: white;
       border: none;
       border-radius: 12px;
       cursor: pointer;
-      font-weight: 600;
-      font-size: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       transition: all 0.2s;
-      min-width: 70px;
+      flex-shrink: 0;
     }
 
     #shoreline-send-button:hover:not(:disabled) {
       background: ${CONFIG.accentColor};
-      transform: translateY(-1px);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(44, 95, 141, 0.3);
+    }
+
+    #shoreline-send-button:active:not(:disabled) {
+      transform: translateY(0);
     }
 
     #shoreline-send-button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
       transform: none;
+    }
+
+    #shoreline-send-button svg {
+      width: 20px;
+      height: 20px;
+      fill: white;
     }
 
     .shoreline-powered-by {
@@ -351,13 +468,56 @@
         bottom: 84px;
       }
 
+      #shoreline-chat-window.expanded {
+        width: calc(100vw - 20px);
+        height: calc(100vh - 100px);
+        transform: none;
+        right: 10px;
+      }
+
       #shoreline-chat-button {
         width: 56px;
         height: 56px;
       }
+
+      .shoreline-chat-header {
+        padding: 20px 16px;
+      }
+
+      .shoreline-chat-header-content h3 {
+        font-size: 16px;
+      }
+
+      .shoreline-chat-header-content p {
+        font-size: 12px;
+      }
+
+      .shoreline-suggested-action {
+        min-width: 100%;
+      }
+
+      .shoreline-message-wrapper {
+        max-width: 85%;
+      }
+
+      .shoreline-header-button {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        min-height: 36px;
+      }
     }
   `;
   document.head.appendChild(style);
+
+  // Create suggested actions HTML
+  const suggestedActionsHTML = CONFIG.suggestedActions.length > 0
+    ? `<div class="shoreline-suggested-actions" id="shoreline-suggested-actions">
+        ${CONFIG.suggestedActions.map((action, index) =>
+          `<button class="shoreline-suggested-action" data-action="${index}">${action}</button>`
+        ).join('')}
+      </div>`
+    : '';
 
   // Create widget HTML
   const widgetHTML = `
@@ -372,18 +532,41 @@
       <div id="shoreline-chat-window">
         <div class="shoreline-chat-header">
           <div class="shoreline-chat-header-content">
-            <h3>${CONFIG.brandName}</h3>
-            <p>We typically reply in a few minutes</p>
+            <h3>Welcome to ${CONFIG.brandName}</h3>
+            <p>Speak to me in any language!</p>
           </div>
-          <button class="shoreline-chat-close" aria-label="Close chat">&times;</button>
+          <div class="shoreline-chat-header-actions">
+            <button class="shoreline-header-button" id="shoreline-expand-button" aria-label="Expand chat">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+              </svg>
+              <span class="tooltip">Expand</span>
+            </button>
+            <button class="shoreline-header-button" id="shoreline-refresh-button" aria-label="Restart conversation">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+              </svg>
+              <span class="tooltip">Restart</span>
+            </button>
+            <button class="shoreline-header-button shoreline-chat-close" aria-label="Close chat">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+              </svg>
+              <span class="tooltip">Close</span>
+            </button>
+          </div>
         </div>
 
         <div class="shoreline-chat-messages" id="shoreline-chat-messages">
           <div class="shoreline-message assistant">
-            <div class="shoreline-message-content">
-              ${CONFIG.welcomeMessage}
+            <div class="shoreline-message-avatar">🤖</div>
+            <div class="shoreline-message-wrapper">
+              <div class="shoreline-message-content">
+                ${CONFIG.welcomeMessage}
+              </div>
             </div>
           </div>
+          ${suggestedActionsHTML}
           <div class="shoreline-typing" id="shoreline-typing">
             <span></span>
             <span></span>
@@ -396,11 +579,15 @@
             <input
               type="text"
               id="shoreline-chat-input"
-              placeholder="Type your message..."
+              placeholder="Type something..."
               aria-label="Chat message"
               autocomplete="off"
             />
-            <button id="shoreline-send-button">Send</button>
+            <button id="shoreline-send-button" aria-label="Send message">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -419,15 +606,20 @@
   // Widget state
   let sessionId = getSessionId();
   let isOpen = false;
+  let isExpanded = false;
+  let suggestedActionsShown = true;
 
   // DOM elements
   const chatButton = document.getElementById('shoreline-chat-button');
   const chatWindow = document.getElementById('shoreline-chat-window');
   const closeButton = document.querySelector('.shoreline-chat-close');
+  const expandButton = document.getElementById('shoreline-expand-button');
+  const refreshButton = document.getElementById('shoreline-refresh-button');
   const chatInput = document.getElementById('shoreline-chat-input');
   const sendButton = document.getElementById('shoreline-send-button');
   const chatMessages = document.getElementById('shoreline-chat-messages');
   const typingIndicator = document.getElementById('shoreline-typing');
+  const suggestedActionsContainer = document.getElementById('shoreline-suggested-actions');
 
   // Toggle chat window
   function toggleChat() {
@@ -441,11 +633,61 @@
     }
   }
 
+  // Toggle expanded view
+  function toggleExpand() {
+    isExpanded = !isExpanded;
+    chatWindow.classList.toggle('expanded', isExpanded);
+    const expandIcon = expandButton.querySelector('svg');
+    if (isExpanded) {
+      expandIcon.innerHTML = '<path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>';
+      expandButton.querySelector('.tooltip').textContent = 'Minimize';
+    } else {
+      expandIcon.innerHTML = '<path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>';
+      expandButton.querySelector('.tooltip').textContent = 'Expand';
+    }
+  }
+
+  // Restart conversation
+  function restartConversation() {
+    if (confirm('Are you sure you want to restart the conversation? This will clear your chat history.')) {
+      // Clear session
+      sessionId = generateSessionId();
+      localStorage.setItem('shoreline-chat-session-id', sessionId);
+
+      // Clear messages except welcome
+      const messages = chatMessages.querySelectorAll('.shoreline-message:not(:first-child)');
+      messages.forEach(msg => msg.remove());
+
+      // Show suggested actions again
+      if (suggestedActionsContainer && !suggestedActionsShown) {
+        suggestedActionsContainer.style.display = 'flex';
+        suggestedActionsShown = true;
+      }
+
+      chatInput.value = '';
+      chatInput.focus();
+    }
+  }
+
   chatButton.addEventListener('click', toggleChat);
   closeButton.addEventListener('click', () => {
     isOpen = false;
     chatWindow.classList.remove('active');
   });
+  expandButton.addEventListener('click', toggleExpand);
+  refreshButton.addEventListener('click', restartConversation);
+
+  // Handle suggested actions
+  if (suggestedActionsContainer) {
+    suggestedActionsContainer.addEventListener('click', (e) => {
+      const actionButton = e.target.closest('.shoreline-suggested-action');
+      if (actionButton) {
+        const actionText = actionButton.textContent;
+        chatInput.value = actionText;
+        chatInput.focus();
+      }
+    });
+  }
 
   // Add message to chat
   function addMessage(role, content) {
@@ -455,13 +697,24 @@
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+    const avatar = role === 'user' ? '👤' : '🤖';
+
     messageDiv.innerHTML = `
-      <div class="shoreline-message-content">${escapeHtml(content)}</div>
-      <div class="shoreline-message-time">${timeStr}</div>
+      <div class="shoreline-message-avatar">${avatar}</div>
+      <div class="shoreline-message-wrapper">
+        <div class="shoreline-message-content">${escapeHtml(content)}</div>
+        <div class="shoreline-message-time">${timeStr}</div>
+      </div>
     `;
 
     chatMessages.insertBefore(messageDiv, typingIndicator);
     chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    // Hide suggested actions after first message
+    if (suggestedActionsContainer && suggestedActionsShown && role === 'user') {
+      suggestedActionsContainer.style.display = 'none';
+      suggestedActionsShown = false;
+    }
   }
 
   // Escape HTML to prevent XSS
@@ -520,7 +773,7 @@
     } catch (error) {
       console.error('Shoreline Chat Error:', error);
       typingIndicator.classList.remove('active');
-      addMessage('assistant', 'I apologize, but I\'m having trouble connecting right now. Please try again in a moment, or call us at (312) 266-3399.');
+      addMessage('assistant', 'I apologize, but I\\'m having trouble connecting right now. Please try again in a moment, or call us at (312) 266-3399.');
     } finally {
       chatInput.disabled = false;
       sendButton.disabled = false;
