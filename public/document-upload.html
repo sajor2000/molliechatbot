@@ -243,9 +243,9 @@
         return;
       }
 
-      // Check file size (10MB limit)
-      if (file.size > 10 * 1024 * 1024) {
-        showResult('File size must be less than 10MB', 'error');
+      // Check file size (5MB limit - Vercel serverless restriction)
+      if (file.size > 5 * 1024 * 1024) {
+        showResult('File size must be less than 5MB (Vercel serverless limit)', 'error');
         return;
       }
 
@@ -255,21 +255,18 @@
       result.style.display = 'none';
 
       try {
-        // Read file as base64
-        const fileData = await readFileAsBase64(file);
+        // Create FormData (proper multipart/form-data)
+        const formData = new FormData();
+        formData.append('file', file);
 
         // Send to API
         const response = await fetch('/api/admin/documents/process', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
             'x-admin-key': adminKey,
+            // Don't set Content-Type - browser will set it with boundary
           },
-          body: JSON.stringify({
-            file: fileData,
-            filename: file.name,
-            adminKey: adminKey,
-          }),
+          body: formData,
         });
 
         const data = await response.json();
@@ -294,19 +291,6 @@
         buttonText.textContent = 'Upload & Process';
       }
     });
-
-    function readFileAsBase64(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          // Remove data URL prefix and get only base64 data
-          const base64 = reader.result.split(',')[1];
-          resolve(base64);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    }
 
     function showResult(message, type) {
       result.textContent = message;

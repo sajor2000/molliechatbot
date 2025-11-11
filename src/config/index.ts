@@ -74,6 +74,16 @@ export const config = {
   },
 
   cronSecret: process.env.CRON_SECRET || '',
+
+  // MongoDB configuration (optional)
+  mongodbUri: process.env.MONGODB_URI || '',
+  mongodbDatabase: process.env.MONGODB_DATABASE || 'mollieweb',
+
+  // OpenRouter configuration (optional)
+  openrouter: {
+    apiKey: process.env.OPENROUTER_API_KEY || '',
+    model: process.env.OPENROUTER_MODEL || 'anthropic/claude-3.5-sonnet',
+  },
 };
 
 export default config;

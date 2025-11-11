@@ -1,4 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import formidable, { File } from 'formidable';
+import { promises as fs } from 'fs';
 import { processDocument } from '../../../src/utils/documentProcessor';
 
 /**
@@ -10,8 +12,11 @@ import { processDocument } from '../../../src/utils/documentProcessor';
  * POST /api/admin/documents/process
  *
  * Body: multipart/form-data
- *   - file: PDF, Markdown, or Text file
- *   - adminKey: Admin authentication key (CRON_SECRET)
+ *   - file: PDF, Markdown, or Text file (max 5MB - Vercel limit)
+ *   - adminKey: Admin authentication key (CRON_SECRET) - optional if using header
+ *
+ * Headers:
+ *   - x-admin-key: Admin authentication key (CRON_SECRET)
  *
  * Response:
  *   - success: boolean
@@ -31,38 +36,45 @@ export default async function handler(
   }
 
   try {
-    // Authentication check
-    const adminKey = req.headers['x-admin-key'] || req.body?.adminKey;
+    // Authentication check - check header first
+    const adminKey = req.headers['x-admin-key'] as string;
     const expectedKey = process.env.CRON_SECRET;
 
     if (!adminKey || adminKey !== expectedKey) {
       return res.status(401).json({
         error: 'Unauthorized',
-        message: 'Invalid admin key',
+        message: 'Invalid admin key. Provide x-admin-key header.',
       });
     }
 
-    // Parse multipart form data
-    const contentType = req.headers['content-type'] || '';
+    // Parse multipart form data using formidable
+    const form = formidable({
+      maxFileSize: 5 * 1024 * 1024, // 5MB max (Vercel serverless limit)
+      allowEmptyFiles: false,
+      filter: function ({ mimetype }) {
+        // Allow PDF, text, and markdown files
+        return (
+          mimetype === 'application/pdf' ||
+          mimetype === 'text/plain' ||
+          mimetype === 'text/markdown' ||
+          mimetype === 'application/octet-stream'
+        );
+      },
+    });
 
-    if (!contentType.includes('multipart/form-data')) {
+    // Parse the incoming request
+    const [fields, files] = await form.parse(req);
+
+    // Check if file was uploaded
+    if (!files.file || files.file.length === 0) {
       return res.status(400).json({
         error: 'Bad Request',
-        message: 'Content-Type must be multipart/form-data',
+        message: 'No file provided. Use "file" field in form data.',
       });
     }
 
-    // Get file from request
-    // Note: Vercel automatically parses multipart/form-data in req.body
-    const fileData = req.body?.file;
-    const filename = req.body?.filename || 'uploaded-document';
-
-    if (!fileData) {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'No file provided. Send file data in "file" field.',
-      });
-    }
+    const file = files.file[0] as File;
+    const filename = file.originalFilename || 'uploaded-document';
 
     // Detect file type from filename extension
     let fileType: 'pdf' | 'markdown' | 'text' = 'text';
@@ -74,26 +86,21 @@ export default async function handler(
       fileType = 'markdown';
     }
 
-    // Convert file data to Buffer
-    let buffer: Buffer;
-    if (Buffer.isBuffer(fileData)) {
-      buffer = fileData;
-    } else if (typeof fileData === 'string') {
-      // If base64 encoded
-      buffer = Buffer.from(fileData, 'base64');
-    } else if (fileData.data && Array.isArray(fileData.data)) {
-      buffer = Buffer.from(fileData.data);
-    } else {
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: 'Invalid file data format',
-      });
-    }
+    console.log(`Processing ${filename} (${fileType}) - ${file.size} bytes`);
 
-    console.log(`Processing ${filename} (${fileType}) - ${buffer.length} bytes`);
+    // Read file from temporary location
+    const buffer = await fs.readFile(file.filepath);
 
     // Process the document
     const result = await processDocument(buffer, filename, fileType);
+
+    // Clean up temporary file
+    try {
+      await fs.unlink(file.filepath);
+    } catch (cleanupError) {
+      console.error('Temp file cleanup error:', cleanupError);
+      // Don't fail the request if cleanup fails
+    }
 
     return res.status(200).json({
       success: true,
@@ -103,6 +110,21 @@ export default async function handler(
   } catch (error: any) {
     console.error('Document processing error:', error);
 
+    // Handle specific errors
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({
+        error: 'File too large',
+        message: 'File size must be less than 5MB (Vercel limit)',
+      });
+    }
+
+    if (error.message && error.message.includes('mimetype')) {
+      return res.status(400).json({
+        error: 'Invalid file type',
+        message: 'Only PDF, Markdown, and Text files are supported',
+      });
+    }
+
     return res.status(500).json({
       error: 'Processing failed',
       message: error.message || 'Unknown error occurred',
@@ -110,12 +132,10 @@ export default async function handler(
   }
 }
 
-// Configure API route
+// Configure API route - MUST disable bodyParser for file uploads
 export const config = {
   api: {
-    bodyParser: {
-      sizeLimit: '10mb', // Max file size
-    },
+    bodyParser: false, // Required for multipart/form-data file uploads
   },
   maxDuration: 60, // 60 seconds max execution time
 };

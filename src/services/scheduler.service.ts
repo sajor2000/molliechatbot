@@ -48,7 +48,7 @@ export class SchedulerService {
       );
 
       // Generate AI summary
-      const { summary, actionItems } = await openrouterService.summarizeConversations(
+      const { summary, todoItems } = await openrouterService.summarizeConversations(
         conversations
       );
 
@@ -61,7 +61,7 @@ export class SchedulerService {
         totalConversations: conversations.length,
         totalMessages,
         summary,
-        actionItems,
+        todoItems,
         conversations,
       };
 

@@ -20,8 +20,9 @@ PDF/MD/TXT → Text Extraction → Chunking → OpenAI Embeddings → Pinecone U
 - ✅ **Smart Chunking**: Paragraph-based chunking with overlap (1000 chars, 200 overlap)
 - ✅ **OpenAI Embeddings**: Uses `text-embedding-3-large` (1024 dimensions)
 - ✅ **Pinecone Upload**: Automatic batch upload with metadata
-- ✅ **10MB File Limit**: Suitable for most documents
+- ✅ **5MB File Limit**: Vercel serverless function restriction
 - ✅ **60s Timeout**: Processes most documents within Vercel limits
+- ✅ **Formidable Parsing**: Proper multipart/form-data handling
 
 ## How to Use
 
@@ -43,56 +44,31 @@ Content-Type: application/json
 x-admin-key: YOUR_CRON_SECRET
 ```
 
-**Body**:
-```json
-{
-  "file": "BASE64_ENCODED_FILE_DATA",
-  "filename": "document.pdf",
-  "adminKey": "YOUR_CRON_SECRET"
-}
-```
+**Body**: multipart/form-data with `file` field
 
 **Example with curl**:
 ```bash
-# Convert file to base64
-FILE_BASE64=$(base64 -i document.pdf)
-
 curl -X POST https://your-app.vercel.app/api/admin/documents/process \
-  -H "Content-Type: application/json" \
   -H "x-admin-key: YOUR_CRON_SECRET" \
-  -d "{
-    \"file\": \"$FILE_BASE64\",
-    \"filename\": \"document.pdf\",
-    \"adminKey\": \"YOUR_CRON_SECRET\"
-  }"
+  -F "file=@document.pdf"
 ```
 
 **Example with JavaScript**:
 ```javascript
 async function uploadDocument(file, adminKey) {
-  const reader = new FileReader();
+  const formData = new FormData();
+  formData.append('file', file);
 
-  reader.onload = async () => {
-    const base64 = reader.result.split(',')[1];
+  const response = await fetch('/api/admin/documents/process', {
+    method: 'POST',
+    headers: {
+      'x-admin-key': adminKey,
+    },
+    body: formData,
+  });
 
-    const response = await fetch('/api/admin/documents/process', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-admin-key': adminKey,
-      },
-      body: JSON.stringify({
-        file: base64,
-        filename: file.name,
-        adminKey: adminKey,
-      }),
-    });
-
-    const result = await response.json();
-    console.log(result);
-  };
-
-  reader.readAsDataURL(file);
+  const result = await response.json();
+  console.log(result);
 }
 ```
 
@@ -158,9 +134,14 @@ CRON_SECRET=your_admin_key
 
 ## File Size Limits
 
-- **Maximum file size**: 10MB
-- **Recommended**: Keep documents under 5MB for faster processing
-- **Timeout**: 60 seconds (Vercel Pro: 300 seconds)
+- **Maximum file size**: 5MB (Vercel serverless hard limit)
+- **Recommended**: Keep documents under 3MB for faster processing
+- **Timeout**: 60 seconds (Vercel Hobby/Pro default)
+
+### Technical Implementation
+- Uses `formidable` library for multipart/form-data parsing
+- Body parser **must be disabled** (`bodyParser: false`)
+- Files read from temp filesystem path, not from `req.body`
 
 ## Comparison: Docling vs Serverless
 
