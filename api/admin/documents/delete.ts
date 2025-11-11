@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth, type AuthRequest } from '../../../src/middleware/auth.middleware';
-import { supabase } from '../../../src/services/supabase.service';
+import { supabaseService } from '../../../src/services/supabase.service';
 import { Pinecone } from '@pinecone-database/pinecone';
-import { config } from '../../../src/config';
+import { config as appConfig } from '../../../src/config';
 
 async function handler(req: AuthRequest, res: VercelResponse) {
   // Only allow DELETE requests
@@ -24,10 +24,10 @@ async function handler(req: AuthRequest, res: VercelResponse) {
 
     // Step 1: Delete vectors from Pinecone that match this document
     const pinecone = new Pinecone({
-      apiKey: config.pinecone.apiKey,
+      apiKey: appConfig.pinecone.apiKey,
     });
 
-    const index = pinecone.index(config.pinecone.indexName);
+    const index = pinecone.index(appConfig.pinecone.indexName);
 
     // Query for all vectors from this document
     // We'll delete by metadata filter
@@ -44,17 +44,7 @@ async function handler(req: AuthRequest, res: VercelResponse) {
     }
 
     // Step 2: Delete file from Supabase storage
-    const { error: deleteError } = await supabase.storage
-      .from('documents')
-      .remove([filename]);
-
-    if (deleteError) {
-      console.error('Error deleting file from Supabase:', deleteError);
-      return res.status(500).json({
-        error: 'Failed to delete document',
-        details: deleteError.message
-      });
-    }
+    await supabaseService.deleteFile(filename);
 
     console.log(`✅ Deleted file ${filename} from Supabase storage`);
 
@@ -77,3 +67,8 @@ async function handler(req: AuthRequest, res: VercelResponse) {
 }
 
 export default requireAuth(handler);
+
+// Configure API route
+export const config = {
+  maxDuration: 30, // 30 seconds for delete operations
+};

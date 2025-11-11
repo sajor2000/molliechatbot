@@ -1,9 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { supabaseDatabaseService } from '../../src/services/supabase-database.service';
+import { activeSessions } from './webhook';
 
-// Import the shared sessions map
-// Note: In production, use Vercel KV or Redis for session persistence
-const activeSessions = new Map();
+// ⚠️ WARNING: Shared session storage imported from webhook.ts
+// This only works if both functions are in the same container instance.
+// In production with cold starts, sessions may not be found.
+// Implement Vercel KV, Redis, or Supabase for reliable session persistence.
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Only allow POST requests

@@ -1,6 +1,9 @@
 import * as dotenv from 'dotenv';
 
-dotenv.config();
+// Only load .env file in development (Vercel provides env vars natively)
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config();
+}
 
 /**
  * Production Environment Validation

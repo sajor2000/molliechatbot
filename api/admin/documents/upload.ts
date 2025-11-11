@@ -5,14 +5,15 @@ import { promises as fs } from 'fs';
 import { doclingService } from '../../../src/services/docling.service';
 import { openrouterService } from '../../../src/services/openrouter.service';
 import { Pinecone } from '@pinecone-database/pinecone';
-import { config } from '../../../src/config';
-import { supabase } from '../../../src/services/supabase.service';
+import { config as appConfig } from '../../../src/config';
+import { supabaseService } from '../../../src/services/supabase.service';
 import path from 'path';
 
 export const config = {
   api: {
     bodyParser: false, // Disable default body parser for file uploads
   },
+  maxDuration: 60, // 60 seconds for document processing
 };
 
 async function handler(req: AuthRequest, res: VercelResponse) {
@@ -60,7 +61,7 @@ async function handler(req: AuthRequest, res: VercelResponse) {
 
     // Step 2: Extract and chunk with Docling
     console.log('🔄 Chunking document with Docling...');
-    const chunks = await doclingService.extractAndChunk(fileContent, {
+    const chunks = await doclingService.processDocument(fileContent, {
       filename: file.originalFilename || 'uploaded-document',
       mimetype: file.mimetype || 'text/plain',
     });
@@ -78,7 +79,7 @@ async function handler(req: AuthRequest, res: VercelResponse) {
     console.log('🔄 Generating embeddings...');
     const vectors = await Promise.all(
       chunks.map(async (chunk, idx) => {
-        const embedding = await openrouterService.generateEmbedding(chunk.content);
+        const embedding = await openrouterService.createEmbedding(chunk.content);
         return {
           id: `${file.originalFilename}-chunk-${idx}`,
           values: embedding,
@@ -98,10 +99,10 @@ async function handler(req: AuthRequest, res: VercelResponse) {
     // Step 4: Upload to Pinecone
     console.log('🔄 Uploading to Pinecone...');
     const pinecone = new Pinecone({
-      apiKey: config.pinecone.apiKey,
+      apiKey: appConfig.pinecone.apiKey,
     });
 
-    const index = pinecone.index(config.pinecone.indexName);
+    const index = pinecone.index(appConfig.pinecone.indexName);
 
     // Upsert in batches of 100
     const batchSize = 100;
@@ -114,7 +115,7 @@ async function handler(req: AuthRequest, res: VercelResponse) {
 
     // Step 5: Store file in Supabase storage
     console.log('🔄 Storing file in Supabase...');
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabaseService.storage
       .from('documents')
       .upload(file.originalFilename!, fileBuffer, {
         contentType: file.mimetype || 'application/octet-stream',

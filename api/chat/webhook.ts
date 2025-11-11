@@ -6,8 +6,16 @@ import { cohereService } from '../../src/services/cohere.service';
 import { ChatMessage, Conversation } from '../../src/types';
 import { getBusinessHoursMessage } from '../../src/utils/business-hours';
 
-// In-memory session storage (for serverless, consider using Vercel KV or Redis)
+// ⚠️ WARNING: In-memory session storage will NOT persist across serverless function invocations!
+// Each cold start creates a new Map instance, losing all session data.
+// For production, implement persistent storage using Vercel KV, Redis, or Supabase:
+// - Install: npm install @vercel/kv
+// - Replace Map with: await kv.set(`session:${id}`, conversation)
+// - Retrieve with: await kv.get(`session:${id}`)
 const activeSessions = new Map<string, Conversation>();
+
+// Export for use in end-session endpoint
+export { activeSessions };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Only allow POST requests
@@ -145,6 +153,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 }
+
+// Configure API route
+export const config = {
+  maxDuration: 30, // 30 seconds for chat responses
+};
 
 // Export sessions for other routes to access
 export { activeSessions };

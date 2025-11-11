@@ -13,6 +13,7 @@ export const config = {
   api: {
     bodyParser: false,
   },
+  maxDuration: 60, // 60 seconds for document processing
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

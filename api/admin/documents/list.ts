@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { requireAuth, type AuthRequest } from '../../../src/middleware/auth.middleware';
-import { supabase } from '../../../src/services/supabase.service';
+import { supabaseService } from '../../../src/services/supabase.service';
 
 async function handler(req: AuthRequest, res: VercelResponse) {
   // Only allow GET requests
@@ -10,37 +10,17 @@ async function handler(req: AuthRequest, res: VercelResponse) {
 
   try {
     // List all files from Supabase storage
-    const { data: files, error: listError } = await supabase.storage
-      .from('documents')
-      .list('', {
-        limit: 100,
-        offset: 0,
-        sortBy: { column: 'created_at', order: 'desc' }
-      });
+    const files = await supabaseService.listFiles();
 
-    if (listError) {
-      console.error('Error listing files from Supabase:', listError);
-      return res.status(500).json({
-        error: 'Failed to list documents',
-        details: listError.message
-      });
-    }
-
-    // Get public URLs for each file
-    const documents = files.map(file => {
-      const { data: urlData } = supabase.storage
-        .from('documents')
-        .getPublicUrl(file.name);
-
-      return {
-        id: file.id,
-        name: file.name,
-        size: file.metadata?.size || 0,
-        created_at: file.created_at,
-        updated_at: file.updated_at,
-        url: urlData.publicUrl,
-      };
-    });
+    // Map to expected format
+    const documents = files.map(file => ({
+      id: file.filename,
+      name: file.originalName,
+      size: file.size,
+      created_at: file.uploadedAt.toISOString(),
+      updated_at: file.uploadedAt.toISOString(),
+      url: file.publicUrl,
+    }));
 
     console.log(`✅ Listed ${documents.length} documents`);
 
@@ -59,3 +39,8 @@ async function handler(req: AuthRequest, res: VercelResponse) {
 }
 
 export default requireAuth(handler);
+
+// Configure API route
+export const config = {
+  maxDuration: 30, // 30 seconds for list operations
+};
