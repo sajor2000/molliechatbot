@@ -1,0 +1,73 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "name": "mollieweb-chatbot",
+  "routes": [
+    {
+      "src": "/api/chat/webhook",
+      "dest": "/api/chat/webhook.ts"
+    },
+    {
+      "src": "/api/chat/end-session",
+      "dest": "/api/chat/end-session.ts"
+    },
+    {
+      "src": "/api/chat/trigger-summary",
+      "dest": "/api/chat/trigger-summary.ts"
+    },
+    {
+      "src": "/api/documents/upload",
+      "dest": "/api/documents/upload.ts"
+    },
+    {
+      "src": "/api/documents/list",
+      "dest": "/api/documents/list.ts"
+    },
+    {
+      "src": "/api/documents/(.*)",
+      "dest": "/api/documents/[filename].ts"
+    },
+    {
+      "src": "/api/cron/daily-summary",
+      "dest": "/api/cron/daily-summary.ts"
+    },
+    {
+      "src": "/api/admin/auth",
+      "dest": "/api/admin/auth.ts"
+    },
+    {
+      "src": "/api/admin/documents/upload",
+      "dest": "/api/admin/documents/upload.ts"
+    },
+    {
+      "src": "/api/admin/documents/list",
+      "dest": "/api/admin/documents/list.ts"
+    },
+    {
+      "src": "/api/admin/documents/delete",
+      "dest": "/api/admin/documents/delete.ts"
+    },
+    {
+      "src": "/admin",
+      "dest": "/admin.html"
+    },
+    {
+      "src": "/test-chat",
+      "dest": "/test-chat.html"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/daily-summary",
+      "schedule": "59 10 * * *"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  },
+  "functions": {
+    "api/**/*.ts": {
+      "maxDuration": 60
+    }
+  }
+}

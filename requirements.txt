@@ -1,0 +1,18 @@
+# Docling - Document processing for AI/RAG applications
+# Official documentation: https://docling-project.github.io/docling/
+docling>=2.0.0
+
+# LangChain integration for Docling
+langchain-docling>=0.1.0
+
+# Additional dependencies for enhanced processing
+# Uncomment if needed for specific features:
+
+# For OCR support (optional)
+# docling[easyocr]>=2.0.0
+
+# For Vision-Language Models (optional, requires significant compute)
+# docling[vlm]>=2.0.0
+
+# For audio processing (optional)
+# docling[asr]>=2.0.0

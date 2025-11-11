@@ -1,0 +1,51 @@
+{
+  "name": "mollieweb-rag-chatbot",
+  "version": "1.0.0",
+  "description": "RAG chatbot with Pinecone, OpenRouter, and daily email summaries",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "embed": "tsx src/scripts/embedKnowledge.ts",
+    "embed:docs": "tsx src/scripts/embedDocuments.ts",
+    "upload:knowledge": "tsx src/scripts/uploadKnowledgeBase.ts",
+    "preprocess:docling": "python3 scripts/preprocess_with_docling.py",
+    "upload:docling": "npm run preprocess:docling && tsx src/scripts/uploadDoclingFinal.ts",
+    "delete:vectors": "tsx src/scripts/deletePineconeVectors.ts",
+    "test": "echo 'No tests specified' && exit 0"
+  },
+  "keywords": [
+    "chatbot",
+    "rag",
+    "pinecone",
+    "openrouter"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@pinecone-database/pinecone": "^2.0.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "@vercel/node": "^3.0.12",
+    "axios": "^1.6.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "formidable": "^3.5.1",
+    "multer": "^2.0.2",
+    "pdf-parse": "^1.1.1",
+    "resend": "^3.0.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/formidable": "^3.4.5",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^20.10.5",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/uuid": "^9.0.7",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}

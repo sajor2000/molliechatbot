@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard - Shoreline Dental Chatbot</title>
+  <link rel="stylesheet" href="/admin.css">
+</head>
+<body>
+  <!-- Login Screen -->
+  <div id="loginScreen" class="screen active">
+    <div class="login-container">
+      <div class="login-header">
+        <h1>🔐 Admin Login</h1>
+        <p>Shoreline Dental Chatbot Manager</p>
+      </div>
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="password">Admin Password</label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            placeholder="Enter admin password"
+            required
+            autocomplete="current-password"
+          >
+        </div>
+        <button type="submit" class="btn btn-primary">
+          <span>Login</span>
+        </button>
+        <div id="loginError" class="error-message" style="display: none;"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Dashboard Screen -->
+  <div id="dashboardScreen" class="screen">
+    <div class="dashboard-container">
+      <!-- Header -->
+      <header class="dashboard-header">
+        <div class="header-content">
+          <h1>📚 Document Manager</h1>
+          <p>Shoreline Dental Chatbot Knowledge Base</p>
+        </div>
+        <div class="header-actions">
+          <a href="/test-chat" class="btn btn-primary" target="_blank">🧪 Test Chat</a>
+          <button id="logoutBtn" class="btn btn-secondary">Logout</button>
+        </div>
+      </header>
+
+      <!-- Upload Section -->
+      <section class="upload-section">
+        <div class="section-header">
+          <h2>📤 Upload New Document</h2>
+          <p>Add PDFs, text files, or markdown documents to expand chatbot knowledge</p>
+        </div>
+
+        <div class="upload-area" id="uploadArea">
+          <div class="upload-content">
+            <div class="upload-icon">📄</div>
+            <p class="upload-text">Drag and drop a file here</p>
+            <p class="upload-subtext">or</p>
+            <button type="button" id="selectFileBtn" class="btn btn-primary">Select File</button>
+            <input type="file" id="fileInput" accept=".pdf,.txt,.md" style="display: none;">
+            <p class="upload-hint">Supported formats: PDF, TXT, MD (Max 10MB)</p>
+          </div>
+        </div>
+
+        <!-- Upload Progress -->
+        <div id="uploadProgress" class="upload-progress" style="display: none;">
+          <div class="progress-header">
+            <span id="progressFilename">Processing...</span>
+            <span id="progressStatus">Uploading...</span>
+          </div>
+          <div class="progress-bar">
+            <div id="progressFill" class="progress-fill"></div>
+          </div>
+          <p id="progressMessage" class="progress-message"></p>
+        </div>
+
+        <!-- Upload Result -->
+        <div id="uploadResult" class="upload-result" style="display: none;"></div>
+      </section>
+
+      <!-- Documents List Section -->
+      <section class="documents-section">
+        <div class="section-header">
+          <h2>📋 Uploaded Documents</h2>
+          <button id="refreshBtn" class="btn btn-secondary">🔄 Refresh</button>
+        </div>
+
+        <div id="documentsLoading" class="loading">Loading documents...</div>
+        <div id="documentsError" class="error-message" style="display: none;"></div>
+
+        <div id="documentsTable" style="display: none;">
+          <table class="documents-table">
+            <thead>
+              <tr>
+                <th>Filename</th>
+                <th>Size</th>
+                <th>Uploaded</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="documentsTableBody">
+              <!-- Documents will be inserted here -->
+            </tbody>
+          </table>
+          <div id="noDocuments" class="no-documents" style="display: none;">
+            <p>No documents uploaded yet. Upload your first document above!</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div id="deleteModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <h3>🗑️ Delete Document</h3>
+      <p id="deleteMessage">Are you sure you want to delete this document?</p>
+      <p class="warning-text">This will remove the document and all associated chatbot knowledge. This action cannot be undone.</p>
+      <div class="modal-actions">
+        <button id="confirmDeleteBtn" class="btn btn-danger">Delete</button>
+        <button id="cancelDeleteBtn" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/admin.js"></script>
+</body>
+</html>
