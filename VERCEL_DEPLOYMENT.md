@@ -83,7 +83,7 @@ This guide will walk you through deploying your RAG chatbot to Vercel with Mongo
 
 **Example:**
 ```
-mongodb+srv://mollieweb:MySecurePass123@mollieweb-cluster.abc123.mongodb.net/
+mongodb+srv://username:your_password_here@your-cluster.mongodb.net/your_database
 ```
 
 ## Step 2: Set Up Supabase
@@ -186,8 +186,8 @@ In Vercel project settings, add these environment variables:
 
 #### MongoDB
 ```
-MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/
-MONGODB_DATABASE=mollieweb
+MONGODB_URI=mongodb+srv://username:your_password_here@your-cluster.mongodb.net/your_database
+MONGODB_DATABASE=your_database_name
 ```
 
 #### Supabase
