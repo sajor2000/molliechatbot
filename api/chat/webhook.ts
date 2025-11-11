@@ -3,10 +3,13 @@ import { v4 as uuidv4 } from 'uuid';
 import { pineconeService } from '../../src/services/pinecone.service';
 import { openaiService } from '../../src/services/openai.service';
 import { cohereService } from '../../src/services/cohere.service';
+import { cacheService } from '../../src/services/cache.service';
 import { ChatMessage, Conversation } from '../../src/types';
 import { getBusinessHoursMessage } from '../../src/utils/business-hours';
 import { kvSessionService } from '../../src/services/kv-session.service';
 import { rateLimitChat } from '../../src/middleware/rate-limit.middleware';
+import { validateChatMessage } from '../../src/middleware/validation.middleware';
+import { corsMiddleware } from '../../src/middleware/cors.middleware';
 
 async function handler(req: VercelRequest, res: VercelResponse) {
   // Only allow POST requests
@@ -47,6 +50,17 @@ async function handler(req: VercelRequest, res: VercelResponse) {
     };
     conversation.messages.push(userMessage);
 
+    // Check cache first for query result
+    const cachedResult = await cacheService.getCachedQueryResult(message);
+    if (cachedResult) {
+      console.log('✅ Using cached response');
+      return res.status(200).json({
+        ...cachedResult,
+        cached: true,
+        sessionId: convId,
+      });
+    }
+
     // RAG BEST PRACTICE 1: Create embedding and query Pinecone for context
     const embedding = await openaiService.createEmbedding(message);
     const contextMatches = await pineconeService.queryEmbeddings(embedding, 10); // Get more candidates for reranking
@@ -80,10 +94,15 @@ async function handler(req: VercelRequest, res: VercelResponse) {
 
       const rerankedResults = await cohereService.rerank(message, documentsToRerank, 3);
 
-      finalMatches = rerankedResults.map(result => ({
-        score: result.relevanceScore,
-        metadata: result.document.metadata,
-      }));
+      finalMatches = rerankedResults.map(result => {
+        const originalMatch = relevantMatches[result.index];
+        return {
+          id: originalMatch.id,
+          score: result.relevanceScore,
+          values: originalMatch.values,
+          metadata: result.document.metadata,
+        };
+      });
 
       console.log(`🎯 Reranked to top 3. Best relevance score: ${rerankedResults[0]?.relevanceScore.toFixed(3)}`);
     }
@@ -114,7 +133,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       ? finalMatches.reduce((sum: number, m: any) => sum + m.score, 0) / finalMatches.length
       : 0;
 
-    return res.status(200).json({
+    const responseData = {
       response: aiResponse,
       sessionId: convId,
       confidence: {
@@ -124,7 +143,13 @@ async function handler(req: VercelRequest, res: VercelResponse) {
         hasContext: finalMatches.length > 0,
         reranked: relevantMatches.length > 0,
       },
-    });
+      cached: false,
+    };
+
+    // Cache the response for future identical queries
+    await cacheService.cacheQueryResult(message, responseData);
+
+    return res.status(200).json(responseData);
   } catch (error) {
     console.error('Error in chat webhook:', error);
 
@@ -144,8 +169,8 @@ async function handler(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-// Apply rate limiting: 30 messages per minute
-export default rateLimitChat(handler);
+// Apply middleware: CORS, validation, and rate limiting
+export default corsMiddleware(validateChatMessage(rateLimitChat(handler)));
 
 // Configure API route
 export const config = {

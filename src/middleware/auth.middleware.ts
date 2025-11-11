@@ -37,7 +37,7 @@ export async function revokeToken(token: string): Promise<boolean> {
  * Middleware to protect admin routes
  */
 export function requireAuth(
-  handler: (req: AuthRequest, res: VercelResponse) => Promise<void>
+  handler: (req: AuthRequest, res: VercelResponse) => Promise<void | VercelResponse>
 ) {
   return async (req: AuthRequest, res: VercelResponse) => {
     // Get token from Authorization header

@@ -55,16 +55,9 @@ async function handler(req: AuthRequest, res: VercelResponse) {
 
     console.log(`📄 Processing file: ${file.originalFilename} (${file.size} bytes)`);
 
-    // Step 1: Read file content
-    const fileBuffer = await fs.readFile(file.filepath);
-    const fileContent = fileBuffer.toString();
-
-    // Step 2: Extract and chunk with Docling
+    // Step 1: Extract and chunk with Docling (it reads the file directly)
     console.log('🔄 Chunking document with Docling...');
-    const chunks = await doclingService.processDocument(fileContent, {
-      filename: file.originalFilename || 'uploaded-document',
-      mimetype: file.mimetype || 'text/plain',
-    });
+    const chunks = await doclingService.processDocument(file.filepath);
 
     if (chunks.length === 0) {
       return res.status(400).json({
@@ -75,17 +68,16 @@ async function handler(req: AuthRequest, res: VercelResponse) {
 
     console.log(`✅ Created ${chunks.length} chunks`);
 
-    // Step 3: Generate embeddings
+    // Step 2: Generate embeddings
     console.log('🔄 Generating embeddings...');
     const vectors = await Promise.all(
       chunks.map(async (chunk, idx) => {
-        const embedding = await openrouterService.createEmbedding(chunk.content);
+        const embedding = await openrouterService.createEmbedding(chunk.text);
         return {
           id: `${file.originalFilename}-chunk-${idx}`,
           values: embedding,
           metadata: {
-            source: file.originalFilename,
-            content: chunk.content,
+            content: chunk.text,
             ...chunk.metadata,
             uploadedAt: new Date().toISOString(),
             uploadedBy: 'admin',
@@ -113,20 +105,23 @@ async function handler(req: AuthRequest, res: VercelResponse) {
 
     console.log(`✅ Uploaded ${vectors.length} vectors to Pinecone`);
 
-    // Step 5: Store file in Supabase storage
+    // Step 4: Store file in Supabase storage
     console.log('🔄 Storing file in Supabase...');
-    const { error: uploadError } = await supabaseService.storage
-      .from('documents')
-      .upload(file.originalFilename!, fileBuffer, {
-        contentType: file.mimetype || 'application/octet-stream',
-        upsert: true, // Replace if exists
-      });
+    const fileBuffer = await fs.readFile(file.filepath);
+    let uploadError: Error | null = null;
 
-    if (uploadError) {
+    try {
+      await supabaseService.uploadFile(
+        fileBuffer,
+        file.originalFilename!,
+        file.originalFilename!,
+        file.mimetype || 'application/octet-stream'
+      );
+      console.log(`✅ Stored file in Supabase storage`);
+    } catch (error) {
+      uploadError = error as Error;
       console.error('⚠️  Error uploading to Supabase:', uploadError);
       // Continue anyway since vectors are already in Pinecone
-    } else {
-      console.log(`✅ Stored file in Supabase storage`);
     }
 
     // Clean up temporary file

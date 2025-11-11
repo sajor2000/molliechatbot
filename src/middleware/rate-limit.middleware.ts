@@ -54,7 +54,7 @@ function getClientIdentifier(req: VercelRequest): string {
  * 5 attempts per 15 minutes per IP
  */
 export function rateLimitAuth(
-  handler: (req: VercelRequest, res: VercelResponse) => Promise<void>
+  handler: (req: VercelRequest, res: VercelResponse) => Promise<void | VercelResponse>
 ) {
   return async (req: VercelRequest, res: VercelResponse) => {
     const identifier = getClientIdentifier(req);
@@ -86,7 +86,7 @@ export function rateLimitAuth(
  * 30 messages per minute per IP
  */
 export function rateLimitChat(
-  handler: (req: VercelRequest, res: VercelResponse) => Promise<void>
+  handler: (req: VercelRequest, res: VercelResponse) => Promise<void | VercelResponse>
 ) {
   return async (req: VercelRequest, res: VercelResponse) => {
     const identifier = getClientIdentifier(req);
@@ -118,7 +118,7 @@ export function rateLimitChat(
  * 10 uploads per hour per IP
  */
 export function rateLimitUpload(
-  handler: (req: VercelRequest, res: VercelResponse) => Promise<void>
+  handler: (req: VercelRequest, res: VercelResponse) => Promise<void | VercelResponse>
 ) {
   return async (req: VercelRequest, res: VercelResponse) => {
     const identifier = getClientIdentifier(req);
@@ -151,7 +151,7 @@ export function rateLimitUpload(
 export function rateLimit(
   requests: number,
   window: `${number} ${'ms' | 's' | 'm' | 'h' | 'd'}`,
-  handler: (req: VercelRequest, res: VercelResponse) => Promise<void>
+  handler: (req: VercelRequest, res: VercelResponse) => Promise<void | VercelResponse>
 ) {
   const limiter = new Ratelimit({
     redis: kv,

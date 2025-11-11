@@ -102,10 +102,7 @@ export default async function handler(
       // Don't fail the request if cleanup fails
     }
 
-    return res.status(200).json({
-      success: true,
-      ...result,
-    });
+    return res.status(200).json(result);
 
   } catch (error: any) {
     console.error('Document processing error:', error);
