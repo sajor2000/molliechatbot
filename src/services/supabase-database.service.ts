@@ -6,12 +6,13 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { Conversation } from '../types';
+import { Conversation, ChatMessage } from '../types';
 import config from '../config';
 
 export class SupabaseDatabaseService {
   private client: SupabaseClient | null = null;
   private tableName = 'conversations';
+  private chatHistoryTable = 'chat_history';
 
   constructor() {
     this.initialize();
@@ -95,6 +96,44 @@ export class SupabaseDatabaseService {
     } catch (error) {
       console.error('Error saving conversation to Supabase:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Append a single chat message to the chat history table
+   * Schema (ensure exists in Supabase):
+   * CREATE TABLE IF NOT EXISTS chat_history (
+   *   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+   *   session_id TEXT NOT NULL,
+   *   role TEXT NOT NULL,
+   *   content TEXT NOT NULL,
+   *   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   * );
+   */
+  async saveChatMessage(entry: {
+    sessionId: string;
+    role: ChatMessage['role'];
+    content: string;
+    createdAt?: Date;
+  }): Promise<void> {
+    const client = this.ensureClient();
+
+    try {
+      const { error } = await client
+        .from(this.chatHistoryTable)
+        .insert({
+          session_id: entry.sessionId,
+          role: entry.role,
+          content: entry.content,
+          created_at: (entry.createdAt || new Date()).toISOString(),
+        });
+
+      if (error) {
+        throw new Error(`Supabase chat history error: ${error.message}`);
+      }
+    } catch (error) {
+      // Don't disrupt chat flow if history persistence fails
+      console.error('Error saving chat message to history:', error);
     }
   }
 
@@ -265,6 +304,60 @@ export class SupabaseDatabaseService {
     } catch (error) {
       console.error('Error getting conversation count:', error);
       return 0;
+    }
+  }
+
+  /**
+   * Get conversation messages from chat_history by session ID
+   */
+  async getConversation(sessionId: string): Promise<ChatMessage[]> {
+    const client = this.ensureClient();
+
+    try {
+      const { data, error } = await client
+        .from(this.chatHistoryTable)
+        .select('*')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        throw new Error(`Supabase query error: ${error.message}`);
+      }
+
+      if (!data) {
+        return [];
+      }
+
+      // Map database format to ChatMessage type
+      return data.map(row => ({
+        role: row.role as ChatMessage['role'],
+        content: row.content,
+        timestamp: new Date(row.created_at),
+      }));
+    } catch (error) {
+      console.error('Error fetching conversation messages:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Delete conversation messages by session ID
+   */
+  async deleteConversation(sessionId: string): Promise<void> {
+    const client = this.ensureClient();
+
+    try {
+      const { error } = await client
+        .from(this.chatHistoryTable)
+        .delete()
+        .eq('session_id', sessionId);
+
+      if (error) {
+        throw new Error(`Supabase delete error: ${error.message}`);
+      }
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+      throw error;
     }
   }
 }

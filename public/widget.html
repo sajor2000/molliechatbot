@@ -552,8 +552,91 @@
     let isExpanded = false;
     let suggestedActionsShown = true;
 
-    // API Configuration
-    const API_BASE_URL = 'http://localhost:3000/api/chat';
+    // API Configuration - Environment-aware URL detection
+    const API_BASE_URL = (() => {
+      // Allow override via global config
+      if (window.CHAT_WIDGET_CONFIG?.apiBaseUrl) {
+        return window.CHAT_WIDGET_CONFIG.apiBaseUrl;
+      }
+
+      // Auto-detect based on hostname
+      const hostname = window.location.hostname;
+
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return 'http://localhost:3000/api/chat';
+      }
+
+      // Production - use same origin as the page
+      return `${window.location.protocol}//${window.location.host}/api/chat`;
+    })();
+
+    const STREAM_CONTENT_TYPE = 'text/event-stream';
+
+    function isStreamingResponse(response) {
+      const contentType = response.headers.get('content-type') || '';
+      return contentType.includes(STREAM_CONTENT_TYPE);
+    }
+
+    async function readStreamingResponse(response, handlers) {
+      if (!response.body || typeof response.body.getReader !== 'function') {
+        throw new Error('Streaming not supported in this browser.');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let streamClosed = false;
+
+      const processEvent = (eventChunk) => {
+        const sanitized = eventChunk.replace(/\r/g, '\n').trim();
+        if (!sanitized) return;
+
+        const lines = sanitized.split('\n').filter(Boolean);
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue;
+          const payload = line.slice(5).trim();
+          if (!payload) continue;
+
+          try {
+            const parsed = JSON.parse(payload);
+            if (parsed.type === 'token' && parsed.content) {
+              handlers.onToken?.(parsed.content);
+            } else if (parsed.type === 'done') {
+              handlers.onDone?.();
+            } else if (parsed.type === 'error') {
+              const message = parsed.error || 'Sorry, I encountered an error. Please try again.';
+              handlers.onError?.(message);
+              streamClosed = true;
+              return;
+            }
+          } catch (err) {
+            console.error('Failed to parse stream chunk:', err);
+          }
+        }
+      };
+
+      while (!streamClosed) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        let boundary = buffer.indexOf('\n\n');
+        while (boundary !== -1) {
+          const chunk = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          processEvent(chunk);
+          if (streamClosed) {
+            await reader.cancel();
+            return;
+          }
+          boundary = buffer.indexOf('\n\n');
+        }
+      }
+
+      if (buffer.trim() && !streamClosed) {
+        processEvent(buffer);
+      }
+    }
 
     // DOM Elements
     const chatButton = document.getElementById('chat-button');
@@ -646,7 +729,6 @@
       typingIndicator.classList.add('active');
 
       try {
-        // Send to API
         const response = await fetch(`${API_BASE_URL}/webhook`, {
           method: 'POST',
           headers: {
@@ -658,19 +740,76 @@
           }),
         });
 
-        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(`HTTP error ${response.status}`);
+        }
 
-        // Update session ID
-        if (data.sessionId) {
-          sessionId = data.sessionId;
+        const headerSession = response.headers.get('x-session-id');
+        if (headerSession) {
+          sessionId = headerSession;
           localStorage.setItem('chat-session-id', sessionId);
         }
 
-        // Hide typing indicator
-        typingIndicator.classList.remove('active');
+        if (isStreamingResponse(response)) {
+          const assistantMessage = addMessage('assistant', '');
+          const contentNode = assistantMessage?.querySelector('.message-content');
+          let assistantText = '';
+          let streamFinished = false;
 
-        // Add assistant response
-        addMessage('assistant', data.response, data.context);
+          await readStreamingResponse(response, {
+            onToken: (token) => {
+              assistantText += token;
+              if (contentNode) {
+                contentNode.textContent = assistantText;
+              }
+            },
+            onDone: () => {
+              streamFinished = true;
+              typingIndicator.classList.remove('active');
+              if (!assistantText && contentNode) {
+                const fallback = 'Thanks for your patience! Please try again.';
+                assistantText = fallback;
+                contentNode.textContent = fallback;
+              }
+            },
+            onError: (message) => {
+              streamFinished = true;
+              typingIndicator.classList.remove('active');
+              assistantText = message;
+              if (contentNode) {
+                contentNode.textContent = message;
+              }
+            },
+          }).catch((streamError) => {
+            console.error('Streaming error:', streamError);
+            if (contentNode) {
+              const fallback = 'Sorry, I encountered an error. Please try again.';
+              assistantText = fallback;
+              contentNode.textContent = fallback;
+            }
+            typingIndicator.classList.remove('active');
+            streamFinished = true;
+          });
+
+          if (!streamFinished) {
+            typingIndicator.classList.remove('active');
+            if (!assistantText && contentNode) {
+              const fallback = 'Thanks for your patience! Please try again.';
+              assistantText = fallback;
+              contentNode.textContent = fallback;
+            }
+          }
+        } else {
+          const data = await response.json();
+
+          if (data.sessionId) {
+            sessionId = data.sessionId;
+            localStorage.setItem('chat-session-id', sessionId);
+          }
+
+          typingIndicator.classList.remove('active');
+          addMessage('assistant', data.response || 'Sorry, I encountered an error. Please try again.', data.context);
+        }
 
       } catch (error) {
         console.error('Error sending message:', error);
@@ -726,6 +865,8 @@
         suggestedActionsContainer.style.display = 'none';
         suggestedActionsShown = false;
       }
+
+      return messageDiv;
     }
 
     // End session when page unloads

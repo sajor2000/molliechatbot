@@ -4,17 +4,23 @@ import { pineconeService } from '../../src/services/pinecone.service';
 import { openaiService } from '../../src/services/openai.service';
 import { cohereService } from '../../src/services/cohere.service';
 import { cacheService } from '../../src/services/cache.service';
+import { streamingService } from '../../src/services/streaming.service';
+import { supabaseDatabaseService } from '../../src/services/supabase-database.service';
+import { logger } from '../../src/services/logger.service';
 import { ChatMessage, Conversation } from '../../src/types';
+import { PineconeMatch, RAGMatch, CohereRerankResult, CohereDocument } from '../../src/types/api.types';
 import { getBusinessHoursMessage } from '../../src/utils/business-hours';
 import { kvSessionService } from '../../src/services/kv-session.service';
 import { rateLimitChat } from '../../src/middleware/rate-limit.middleware';
 import { validateChatMessage } from '../../src/middleware/validation.middleware';
 import { corsMiddleware } from '../../src/middleware/cors.middleware';
+import { createErrorHandler, addBreadcrumb } from '../../src/services/sentry.service';
 
-async function handler(req: VercelRequest, res: VercelResponse) {
+async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   // Only allow POST requests
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
   }
 
   // Get or create session ID (needs to be outside try-catch for error handler)
@@ -23,7 +29,8 @@ async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (!message) {
-      return res.status(400).json({ error: 'Message is required' });
+      res.status(400).json({ error: 'Message is required' });
+      return;
     }
 
     // Get or create conversation from KV storage
@@ -50,16 +57,42 @@ async function handler(req: VercelRequest, res: VercelResponse) {
     };
     conversation.messages.push(userMessage);
 
+    // Save user message to Supabase immediately (per-turn persistence)
+    await supabaseDatabaseService.saveChatMessage({
+      sessionId: convId,
+      role: 'user',
+      content: message,
+      createdAt: userMessage.timestamp,
+    });
+
     // Check cache first for query result
     const cachedResult = await cacheService.getCachedQueryResult(message);
     if (cachedResult) {
-      console.log('✅ Using cached response');
-      return res.status(200).json({
+      logger.cache(true, `query:${message.substring(0, 50)}`);
+      addBreadcrumb('Cache hit - returning cached response', { sessionId: convId }, 'cache', 'info');
+
+      // Save cached assistant response to Supabase (per-turn persistence)
+      const cachedAssistantMessage: ChatMessage = {
+        role: 'assistant',
+        content: cachedResult.response,
+        timestamp: new Date(),
+      };
+      await supabaseDatabaseService.saveChatMessage({
+        sessionId: convId,
+        role: 'assistant',
+        content: cachedResult.response,
+        createdAt: cachedAssistantMessage.timestamp,
+      });
+
+      res.setHeader('X-Session-ID', convId);
+      res.status(200).json({
         ...cachedResult,
         cached: true,
         sessionId: convId,
       });
+      return;
     }
+    addBreadcrumb('Cache miss - performing RAG query', { sessionId: convId, messageLength: message.length }, 'cache', 'info');
 
     // RAG BEST PRACTICE 1: Create embedding and query Pinecone for context
     const embedding = await openaiService.createEmbedding(message);
@@ -67,91 +100,152 @@ async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Log top similarity scores for debugging
     if (contextMatches.length > 0) {
-      console.log('🔍 Top similarity scores:',
-        contextMatches.slice(0, 3).map((m: any) => ({
-          score: m.score?.toFixed(3),
+      logger.rag('Top similarity scores', {
+        topScores: contextMatches.slice(0, 3).map((m: PineconeMatch) => ({
+          score: m.score.toFixed(3),
           source: m.metadata?.source?.substring(0, 50),
           preview: m.metadata?.text?.substring(0, 80) + '...'
         }))
-      );
+      });
     }
 
     // RAG BEST PRACTICE 2: Similarity threshold filtering (prevent irrelevant results)
     const SIMILARITY_THRESHOLD = 0.60; // Lowered to retrieve more relevant context for reranking
     const relevantMatches = contextMatches.filter(
-      (match: any) => match.score >= SIMILARITY_THRESHOLD
+      (match: PineconeMatch): boolean => match.score >= SIMILARITY_THRESHOLD
     );
 
-    console.log(`📊 Retrieved ${contextMatches.length} chunks, ${relevantMatches.length} above threshold (${SIMILARITY_THRESHOLD})`);
+    logger.rag(`Retrieved chunks: ${contextMatches.length}, relevant: ${relevantMatches.length}`, {
+      chunks: contextMatches.length,
+      relevantChunks: relevantMatches.length,
+      threshold: SIMILARITY_THRESHOLD
+    });
+    addBreadcrumb('Vector search completed', {
+      chunksRetrieved: contextMatches.length,
+      chunksRelevant: relevantMatches.length,
+      threshold: SIMILARITY_THRESHOLD
+    }, 'rag', 'info');
 
     // RAG BEST PRACTICE 3: Cohere Reranking for improved context selection
-    let finalMatches = relevantMatches;
+    let finalMatches: RAGMatch[] = relevantMatches;
     if (relevantMatches.length > 0) {
-      const documentsToRerank = relevantMatches.map((match: any) => ({
+      const documentsToRerank: CohereDocument[] = relevantMatches.map((match: PineconeMatch) => ({
         text: match.metadata?.text || '',
         metadata: match.metadata,
       }));
 
-      const rerankedResults = await cohereService.rerank(message, documentsToRerank, 3);
+      const rerankedResults: CohereRerankResult[] = await cohereService.rerank(message, documentsToRerank, 3);
 
-      finalMatches = rerankedResults.map(result => {
+      finalMatches = rerankedResults.map((result: CohereRerankResult): RAGMatch => {
         const originalMatch = relevantMatches[result.index];
         return {
-          id: originalMatch.id,
+          ...originalMatch,
           score: result.relevanceScore,
-          values: originalMatch.values,
-          metadata: result.document.metadata,
         };
       });
 
-      console.log(`🎯 Reranked to top 3. Best relevance score: ${rerankedResults[0]?.relevanceScore.toFixed(3)}`);
+      logger.rag(`Reranked to top 3`, {
+        topScore: rerankedResults[0]?.relevanceScore.toFixed(3),
+        resultsCount: rerankedResults.length
+      });
+      addBreadcrumb('Cohere reranking completed', {
+        topScore: rerankedResults[0]?.relevanceScore,
+        resultsCount: rerankedResults.length
+      }, 'rag', 'info');
     }
 
     // RAG BEST PRACTICE 4: Build structured context from reranked chunks
-    const context = finalMatches.length > 0
+    const context: string = finalMatches.length > 0
       ? finalMatches
-          .map((match: any) => match.metadata?.text || '')
+          .map((match: RAGMatch) => match.metadata?.text || '')
           .join('\n\n')
       : ''; // Empty context if no relevant results
 
-    // Generate response with RAG context (or without if no relevant context found)
-    const aiResponse = await openaiService.chat(conversation.messages, context);
+    // RAG BEST PRACTICE 5: Stream response with incremental delivery
+    const { stream, fullResponsePromise } = streamingService.createChatStream(
+      conversation.messages,
+      context
+    );
 
-    // Add assistant message
-    const assistantMessage: ChatMessage = {
-      role: 'assistant',
-      content: aiResponse,
-      timestamp: new Date(),
+    // Set SSE headers for streaming
+    const headers = streamingService.setStreamingHeaders({
+      'X-Session-ID': convId,
+    });
+
+    Object.entries(headers).forEach(([key, value]) => {
+      res.setHeader(key, value);
+    });
+
+    // Start streaming response to client
+    res.status(200);
+    (res as any).flushHeaders?.();
+
+    // Pipe the stream to response
+    const reader = stream.getReader();
+    const pump = async (): Promise<void> => {
+      const { done, value } = await reader.read();
+      if (done) {
+        res.end();
+        return;
+      }
+      res.write(Buffer.from(value));
+      return pump();
     };
-    conversation.messages.push(assistantMessage);
 
-    // Save conversation to KV storage with 1-hour TTL
-    await kvSessionService.setSession(convId, conversation);
+    // Start pumping and handle completion in background
+    pump().catch((error) => {
+      logger.error('Stream pump error', error);
+      res.end();
+    });
 
-    // RAG BEST PRACTICE 5: Return confidence information with reranking scores
-    const avgScore = finalMatches.length > 0
-      ? finalMatches.reduce((sum: number, m: any) => sum + m.score, 0) / finalMatches.length
-      : 0;
+    // Wait for full response to save and cache (runs in background)
+    fullResponsePromise.then(async (aiResponse) => {
+      // Add assistant message
+      const assistantMessage: ChatMessage = {
+        role: 'assistant',
+        content: aiResponse,
+        timestamp: new Date(),
+      };
+      conversation.messages.push(assistantMessage);
 
-    const responseData = {
-      response: aiResponse,
-      sessionId: convId,
-      confidence: {
-        score: avgScore,
-        chunksUsed: finalMatches.length,
-        chunksRetrieved: contextMatches.length,
-        hasContext: finalMatches.length > 0,
-        reranked: relevantMatches.length > 0,
-      },
-      cached: false,
-    };
+      // Save assistant message to Supabase immediately (per-turn persistence)
+      await supabaseDatabaseService.saveChatMessage({
+        sessionId: convId,
+        role: 'assistant',
+        content: aiResponse,
+        createdAt: assistantMessage.timestamp,
+      });
 
-    // Cache the response for future identical queries
-    await cacheService.cacheQueryResult(message, responseData);
+      // Save conversation to KV storage with 1-hour TTL
+      await kvSessionService.setSession(convId, conversation);
 
-    return res.status(200).json(responseData);
+      // Calculate confidence metrics
+      const avgScore: number = finalMatches.length > 0
+        ? finalMatches.reduce((sum: number, m: RAGMatch) => sum + m.score, 0) / finalMatches.length
+        : 0;
+
+      const responseData = {
+        response: aiResponse,
+        sessionId: convId,
+        confidence: {
+          score: avgScore,
+          chunksUsed: finalMatches.length,
+          chunksRetrieved: contextMatches.length,
+          hasContext: finalMatches.length > 0,
+          reranked: relevantMatches.length > 0,
+        },
+        cached: false,
+      };
+
+      // Cache the response for future identical queries
+      await cacheService.cacheQueryResult(message, responseData);
+    }).catch((error) => {
+      logger.error('Error saving streamed response', error);
+    });
+
+    return;
   } catch (error) {
-    console.error('Error in chat webhook:', error);
+    logger.error('Error in chat webhook', error);
 
     // Provide user-friendly error messages (don't expose internals)
     const userMessage = error instanceof Error &&
@@ -161,7 +255,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       ? error.message
       : 'Sorry, I encountered an error. Please try again.';
 
-    return res.status(500).json({
+    res.status(500).json({
       error: userMessage,
       sessionId: convId,
       canRetry: true
@@ -169,8 +263,9 @@ async function handler(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-// Apply middleware: CORS, validation, and rate limiting
-export default corsMiddleware(validateChatMessage(rateLimitChat(handler)));
+// Apply middleware: CORS, validation, rate limiting, and error tracking
+const wrappedHandler = createErrorHandler(handler);
+export default corsMiddleware(validateChatMessage(rateLimitChat(wrappedHandler)));
 
 // Configure API route
 export const config = {

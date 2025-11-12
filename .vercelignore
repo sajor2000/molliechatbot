@@ -5,34 +5,59 @@ venv/
 *.pyc
 __pycache__/
 
+# Development scripts (one-time operations)
+scripts/
+src/scripts/
+
 # Development files
 .env
 .env.local
 .env.*.local
-
-# Scripts directory (local processing only)
-src/scripts/
 
 # Processed data (already uploaded to Pinecone)
 processed-chunks.json
 chunk-analysis-report.json
 data/processed/
 
+# Tests and test files
+tests/
+src/middleware/__tests__/
+*.test.ts
+*.spec.ts
+
 # Logs
 logs/
 *.log
 
-# Tests
-tests/
-
-# Documentation
+# Documentation (keep only README.md and essential deployment guide)
 docs/
 *.md
 !README.md
+!CHANGELOG.md
+!FINAL_DEPLOYMENT_STEPS.md
+
+# Example and backup files
+*.backup
+*.old
+*.bak
+*.example.ts
 
 # IDE
 .vscode/
 .idea/
+.claude/
 
 # OS files
 .DS_Store
+Thumbs.db
+
+# Build artifacts (handled by Vercel)
+dist/
+.next/
+out/
+
+# Migrations (run once, not needed in deployment)
+migrations/
+
+# API testing tools (development only)
+postman/

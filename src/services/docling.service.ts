@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import pdf from 'pdf-parse';
+import mammoth from 'mammoth';
 
 export interface DocumentChunk {
   id: string;
@@ -48,6 +49,10 @@ export class DoclingService {
         const pdfResult = await this.extractFromPDF(filePath);
         text = pdfResult.text;
         pageMap = pdfResult.pageMap;
+        break;
+      case '.docx':
+      case '.doc':
+        text = await this.extractFromDOCX(filePath);
         break;
       case '.txt':
       case '.md':
@@ -104,6 +109,20 @@ export class DoclingService {
     }
 
     return { text: fullText, pageMap };
+  }
+
+  /**
+   * Extract text from DOCX files
+   */
+  private async extractFromDOCX(filePath: string): Promise<string> {
+    const dataBuffer = await fs.readFile(filePath);
+    const result = await mammoth.extractRawText({ buffer: dataBuffer });
+
+    if (result.messages && result.messages.length > 0) {
+      console.warn('DOCX extraction warnings:', result.messages);
+    }
+
+    return result.value;
   }
 
   /**
@@ -237,7 +256,7 @@ export class DoclingService {
     options?: ChunkingOptions
   ): Promise<DocumentChunk[]> {
     const files = await fs.readdir(dirPath);
-    const supportedExtensions = ['.pdf', '.txt', '.md'];
+    const supportedExtensions = ['.pdf', '.docx', '.doc', '.txt', '.md'];
     
     const allChunks: DocumentChunk[] = [];
 

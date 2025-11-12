@@ -1,13 +1,16 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { supabaseDatabaseService } from '../../src/services/supabase-database.service';
-import { openrouterService } from '../../src/services/openrouter.service';
+import { openaiService } from '../../src/services/openai.service';
 import { emailService } from '../../src/services/email.service';
 import { DailySummary } from '../../src/types';
+import { createErrorHandler } from '../../src/services/sentry.service';
+import { requireAuth, type AuthRequest } from '../../src/middleware/auth.middleware';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+async function handler(req: AuthRequest, res: VercelResponse): Promise<void> {
   // Only allow POST requests
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
   }
 
   try {
@@ -18,10 +21,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (conversations.length === 0) {
       console.log('No conversations found for yesterday. Skipping email.');
-      return res.status(200).json({
+      res.status(200).json({
         success: true,
         message: 'No conversations found for yesterday'
       });
+      return;
     }
 
     console.log(`Found ${conversations.length} conversations from yesterday`);
@@ -33,7 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
 
     // Generate AI summary
-    const { summary, todoItems } = await openrouterService.summarizeConversations(
+    const { summary, todoItems } = await openaiService.summarizeConversations(
       conversations
     );
 
@@ -55,7 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log('Daily summary completed successfully');
 
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
       message: 'Daily summary sent successfully',
       stats: {
@@ -66,9 +70,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (error) {
     console.error('Error generating daily summary:', error);
-    return res.status(500).json({
+    res.status(500).json({
       error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 }
+
+// Apply authentication and error tracking
+export default requireAuth(createErrorHandler(handler));

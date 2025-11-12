@@ -16,9 +16,27 @@
 (function() {
   'use strict';
 
+  // Auto-detect API base URL
+  const getApiBaseUrl = () => {
+    // Check if running on localhost for development
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return 'http://localhost:3000/api/chat';
+    }
+    // Production: Use the script's origin (where embed-shoreline.js is hosted)
+    const scripts = document.getElementsByTagName('script');
+    for (let script of scripts) {
+      if (script.src && script.src.includes('embed-shoreline.js')) {
+        const url = new URL(script.src);
+        return `${url.protocol}//${url.host}/api/chat`;
+      }
+    }
+    // Fallback: assume same origin as page
+    return `${window.location.protocol}//${window.location.host}/api/chat`;
+  };
+
   // Configuration - can be overridden via window.SHORELINE_CHAT_CONFIG
   const CONFIG = Object.assign({
-    apiBaseUrl: 'https://your-production-domain.com/api/chat', // UPDATE THIS IN PRODUCTION
+    apiBaseUrl: getApiBaseUrl(),
     brandName: 'Shoreline Dental Chicago',
     brandColor: '#2C5F8D', // Professional dental blue
     accentColor: '#4A90A4', // Lighter blue for hover states
@@ -29,6 +47,74 @@
       'I\\'d like to schedule an appointment'
     ]
   }, window.SHORELINE_CHAT_CONFIG || {});
+
+  const STREAM_CONTENT_TYPE = 'text/event-stream';
+
+  function isStreamingResponse(response) {
+    const contentType = response.headers.get('content-type') || '';
+    return contentType.includes(STREAM_CONTENT_TYPE);
+  }
+
+  async function readStreamingResponse(response, handlers) {
+    if (!response.body || typeof response.body.getReader !== 'function') {
+      throw new Error('Streaming not supported in this browser.');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let streamClosed = false;
+
+    const processEvent = (eventChunk) => {
+      const sanitized = eventChunk.replace(/\r/g, '\n').trim();
+      if (!sanitized) return;
+
+      const lines = sanitized.split('\n').filter(Boolean);
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const payload = line.slice(5).trim();
+        if (!payload) continue;
+
+        try {
+          const parsed = JSON.parse(payload);
+          if (parsed.type === 'token' && parsed.content) {
+            handlers.onToken?.(parsed.content);
+          } else if (parsed.type === 'done') {
+            handlers.onDone?.();
+          } else if (parsed.type === 'error') {
+            const message = parsed.error || 'I apologize, but I encountered an error. Please try again.';
+            handlers.onError?.(message);
+            streamClosed = true;
+            return;
+          }
+        } catch (err) {
+          console.error('Failed to parse stream chunk:', err);
+        }
+      }
+    };
+
+    while (!streamClosed) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      let boundary = buffer.indexOf('\n\n');
+      while (boundary !== -1) {
+        const chunk = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        processEvent(chunk);
+        if (streamClosed) {
+          await reader.cancel();
+          return;
+        }
+        boundary = buffer.indexOf('\n\n');
+      }
+    }
+
+    if (buffer.trim() && !streamClosed) {
+      processEvent(buffer);
+    }
+  }
 
   // Generate unique session ID
   function generateSessionId() {
@@ -715,6 +801,8 @@
       suggestedActionsContainer.style.display = 'none';
       suggestedActionsShown = false;
     }
+
+    return messageDiv;
   }
 
   // Escape HTML to prevent XSS
@@ -728,6 +816,8 @@
   async function sendMessage() {
     const message = chatInput.value.trim();
     if (!message) return;
+
+    const fallbackAssistantMessage = 'I apologize, but I\\'m having trouble connecting right now. Please try again in a moment, or call us at (312) 266-3399.';
 
     // Disable input
     chatInput.disabled = true;
@@ -756,24 +846,73 @@
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json();
-
-      // Update session ID
-      if (data.sessionId) {
-        sessionId = data.sessionId;
+      const headerSession = response.headers.get('x-session-id');
+      if (headerSession) {
+        sessionId = headerSession;
         localStorage.setItem('shoreline-chat-session-id', sessionId);
       }
 
-      // Hide typing indicator
-      typingIndicator.classList.remove('active');
+      if (isStreamingResponse(response)) {
+        const assistantMessage = addMessage('assistant', '');
+        const contentNode = assistantMessage?.querySelector('.shoreline-message-content');
+        let assistantText = '';
+        let streamFinished = false;
 
-      // Add assistant response
-      addMessage('assistant', data.response || 'I apologize, but I encountered an error. Please try again.');
+        await readStreamingResponse(response, {
+          onToken: (token) => {
+            assistantText += token;
+            if (contentNode) {
+              contentNode.textContent = assistantText;
+            }
+          },
+          onDone: () => {
+            streamFinished = true;
+            typingIndicator.classList.remove('active');
+            if (!assistantText && contentNode) {
+              assistantText = 'Thanks for your patience! Please try again.';
+              contentNode.textContent = assistantText;
+            }
+          },
+          onError: (message) => {
+            streamFinished = true;
+            typingIndicator.classList.remove('active');
+            assistantText = message;
+            if (contentNode) {
+              contentNode.textContent = message;
+            }
+          },
+        }).catch((streamError) => {
+          console.error('Shoreline streaming error:', streamError);
+          streamFinished = true;
+          typingIndicator.classList.remove('active');
+          if (contentNode) {
+            contentNode.textContent = fallbackAssistantMessage;
+          }
+        });
+
+        if (!streamFinished) {
+          typingIndicator.classList.remove('active');
+          if (!assistantText && contentNode) {
+            contentNode.textContent = fallbackAssistantMessage;
+          }
+        }
+      } else {
+        const data = await response.json();
+
+        // Update session ID
+        if (data.sessionId) {
+          sessionId = data.sessionId;
+          localStorage.setItem('shoreline-chat-session-id', sessionId);
+        }
+
+        typingIndicator.classList.remove('active');
+        addMessage('assistant', data.response || fallbackAssistantMessage);
+      }
 
     } catch (error) {
       console.error('Shoreline Chat Error:', error);
       typingIndicator.classList.remove('active');
-      addMessage('assistant', 'I apologize, but I\\'m having trouble connecting right now. Please try again in a moment, or call us at (312) 266-3399.');
+      addMessage('assistant', fallbackAssistantMessage);
     } finally {
       chatInput.disabled = false;
       sendButton.disabled = false;

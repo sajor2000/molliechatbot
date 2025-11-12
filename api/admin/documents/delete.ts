@@ -1,26 +1,30 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { VercelResponse } from '@vercel/node';
 import { requireAuth, type AuthRequest } from '../../../src/middleware/auth.middleware';
 import { supabaseService } from '../../../src/services/supabase.service';
 import { Pinecone } from '@pinecone-database/pinecone';
 import { config as appConfig } from '../../../src/config';
+import { createErrorHandler, addBreadcrumb } from '../../../src/services/sentry.service';
 
-async function handler(req: AuthRequest, res: VercelResponse) {
+async function handler(req: AuthRequest, res: VercelResponse): Promise<void> {
   // Only allow DELETE requests
   if (req.method !== 'DELETE') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
   }
 
   try {
     const { filename } = req.query;
 
     if (!filename || typeof filename !== 'string') {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'Bad request',
         message: 'Filename parameter is required'
       });
+      return;
     }
 
     console.log(`🗑️  Deleting document: ${filename}`);
+    addBreadcrumb('Admin: Deleting document', { filename }, 'admin', 'info');
 
     // Step 1: Delete vectors from Pinecone that match this document
     const pinecone = new Pinecone({
@@ -48,7 +52,7 @@ async function handler(req: AuthRequest, res: VercelResponse) {
 
     console.log(`✅ Deleted file ${filename} from Supabase storage`);
 
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
       message: `Document ${filename} deleted successfully`,
       deleted: {
@@ -59,14 +63,16 @@ async function handler(req: AuthRequest, res: VercelResponse) {
     });
   } catch (error) {
     console.error('❌ Error deleting document:', error);
-    return res.status(500).json({
+    res.status(500).json({
       error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 }
 
-export default requireAuth(handler);
+// Apply authentication and error tracking
+const wrappedHandler = createErrorHandler(handler);
+export default requireAuth(wrappedHandler);
 
 // Configure API route
 export const config = {

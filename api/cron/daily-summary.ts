@@ -1,14 +1,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { supabaseDatabaseService } from '../../src/services/supabase-database.service';
-import { openrouterService } from '../../src/services/openrouter.service';
+import { openaiService } from '../../src/services/openai.service';
 import { emailService } from '../../src/services/email.service';
 import { DailySummary } from '../../src/types';
+import { createErrorHandler, addBreadcrumb } from '../../src/services/sentry.service';
 
 export const config = {
   maxDuration: 60, // Pro plan allows up to 60 seconds
 };
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+async function handler(req: VercelRequest, res: VercelResponse) {
   // Only allow GET requests (Vercel Cron uses GET)
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -25,6 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     console.log('Running scheduled daily summary task...');
+    addBreadcrumb('Cron: Daily summary started', {}, 'cron', 'info');
 
     // Get yesterday's conversations
     const conversations = await supabaseDatabaseService.getYesterdayConversations();
@@ -72,7 +74,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
 
     // Generate AI summary and to-do items
-    const { summary, todoItems } = await openrouterService.summarizeConversations(
+    const { summary, todoItems } = await openaiService.summarizeConversations(
       conversations
     );
 
@@ -108,3 +110,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 }
+
+// Apply error tracking
+export default createErrorHandler(handler);

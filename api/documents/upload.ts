@@ -4,9 +4,14 @@ import formidable from 'formidable';
 import fs from 'fs/promises';
 import path from 'path';
 import { supabaseService } from '../../src/services/supabase.service';
-import { doclingService } from '../../src/services/docling.service';
 import { pineconeService } from '../../src/services/pinecone.service';
-import { openrouterService } from '../../src/services/openrouter.service';
+import { embeddingService } from '../../src/services/embedding.service';
+import { logger } from '../../src/services/logger.service';
+import { PineconeVector } from '../../src/types/api.types';
+import { createErrorHandler, addBreadcrumb } from '../../src/services/sentry.service';
+import { liteDocumentService } from '../../src/services/document-lite.service';
+import { config as appConfig } from '../../src/config';
+import { requireAuth, type AuthRequest } from '../../src/middleware/auth.middleware';
 
 // Disable body parsing, we'll handle it ourselves
 export const config = {
@@ -16,7 +21,7 @@ export const config = {
   maxDuration: 60, // 60 seconds for document processing
 };
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+async function handler(req: AuthRequest, res: VercelResponse) {
   // Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -27,12 +32,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const form = formidable({
       maxFileSize: 10 * 1024 * 1024, // 10MB limit
       filter: function ({ mimetype }) {
-        // Allow PDF, text, and markdown files
+        // Allow PDF, Word, text, and markdown files
         return (
           mimetype === 'application/pdf' ||
           mimetype === 'text/plain' ||
           mimetype === 'text/markdown' ||
-          mimetype === 'text/x-markdown'
+          mimetype === 'text/x-markdown' ||
+          mimetype === 'application/msword' ||
+          mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         );
       },
     });
@@ -48,7 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const fileArray = files.document;
     if (!fileArray || fileArray.length === 0) {
-      return res.status(400).json({ error: 'No file uploaded' });
+      return res.status(400).json({ error: 'No file uploaded or unsupported file type (PDF, DOC, DOCX, TXT, MD only)' });
     }
 
     const file = Array.isArray(fileArray) ? fileArray[0] : fileArray;
@@ -56,10 +63,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ext = path.extname(originalName);
     const uniqueName = `${Date.now()}-${uuidv4()}${ext}`;
 
-    console.log(`Processing uploaded document: ${originalName}`);
+    const startTime = Date.now();
 
     // Read file buffer
     const fileBuffer = await fs.readFile(file.filepath);
+
+    logger.document(`Processing uploaded document`, {
+      filename: originalName,
+      size: fileBuffer.length,
+    });
 
     // Upload to Supabase
     const uploadedFile = await supabaseService.uploadFile(
@@ -69,35 +81,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       file.mimetype || 'application/octet-stream'
     );
 
-    // Process document with Docling (using temp file)
-    const chunks = await doclingService.processDocument(file.filepath, {
+    const chunkOptions = {
       chunkSize: 1000,
       chunkOverlap: 200,
       preserveParagraphs: true,
+    };
+    const useDocling = appConfig.documentProcessing.mode === 'docling';
+    logger.debug('Document chunking mode', { mode: useDocling ? 'docling' : 'lite' });
+
+    const chunks = useDocling
+      ? await (await import('../../src/services/docling.service')).doclingService.processDocument(file.filepath, chunkOptions)
+      : await liteDocumentService.processDocument(file.filepath, chunkOptions);
+
+    logger.document(`Document chunked`, {
+      filename: originalName,
+      chunks: chunks.length,
     });
 
-    // Create embeddings and upload to Pinecone
-    const vectors = [];
-    for (const chunk of chunks) {
-      const embedding = await openrouterService.createEmbedding(chunk.text);
-      vectors.push({
-        id: uuidv4(),
-        values: embedding,
-        metadata: {
-          text: chunk.text,
-          source: uniqueName,
-          originalName: originalName,
-          chunkIndex: chunk.metadata.chunkIndex,
-          totalChunks: chunk.metadata.totalChunks,
-          pageNumber: chunk.metadata.pageNumber,
-          documentType: chunk.metadata.documentType,
-          uploadedAt: new Date().toISOString(),
-        },
-      });
+    // Generate embeddings in parallel batches (PERFORMANCE OPTIMIZATION)
+    const chunkTexts = chunks.map(c => c.text);
+    const { embeddings, cachedCount, generatedCount } = await embeddingService.generateBatch({
+      texts: chunkTexts,
+      useCache: true,
+    });
 
-      // Rate limiting
-      await new Promise(resolve => setTimeout(resolve, 200));
-    }
+    logger.document(`Embeddings generated`, {
+      filename: originalName,
+      total: embeddings.length,
+      cached: cachedCount,
+      generated: generatedCount,
+    });
+
+    // Create vectors with embeddings
+    const vectors: PineconeVector[] = chunks.map((chunk, idx) => ({
+      id: uuidv4(),
+      values: embeddings[idx],
+      metadata: {
+        text: chunk.text,
+        source: uniqueName,
+        originalName: originalName,
+        chunkIndex: chunk.metadata.chunkIndex,
+        totalChunks: chunk.metadata.totalChunks,
+        pageNumber: chunk.metadata.pageNumber,
+        documentType: chunk.metadata.documentType,
+        uploadedAt: new Date().toISOString(),
+      },
+    }));
 
     // Upload to Pinecone in batches
     const BATCH_SIZE = 100;
@@ -109,6 +138,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Clean up temp file
     await fs.unlink(file.filepath).catch(() => {});
 
+    const processingTime = Date.now() - startTime;
+    logger.performance('Document processing', processingTime, {
+      filename: originalName,
+      chunks: chunks.length,
+      vectors: vectors.length,
+    });
+
     return res.status(200).json({
       success: true,
       filename: originalName,
@@ -116,13 +152,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       chunks: chunks.length,
       vectors: vectors.length,
       publicUrl: uploadedFile.publicUrl,
+      processingTimeMs: processingTime,
       message: 'Document processed and embedded successfully',
     });
   } catch (error) {
-    console.error('Error processing document:', error);
+    logger.error('Error processing document', error);
     return res.status(500).json({
       error: 'Failed to process document',
       details: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 }
+
+// Apply authentication and error tracking
+export default requireAuth(createErrorHandler(handler));

@@ -1,11 +1,13 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { VercelResponse } from '@vercel/node';
 import { requireAuth, type AuthRequest } from '../../../src/middleware/auth.middleware';
 import { supabaseService } from '../../../src/services/supabase.service';
+import { createErrorHandler } from '../../../src/services/sentry.service';
 
-async function handler(req: AuthRequest, res: VercelResponse) {
+async function handler(req: AuthRequest, res: VercelResponse): Promise<void> {
   // Only allow GET requests
   if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
   }
 
   try {
@@ -24,21 +26,23 @@ async function handler(req: AuthRequest, res: VercelResponse) {
 
     console.log(`✅ Listed ${documents.length} documents`);
 
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
       documents,
       total: documents.length,
     });
   } catch (error) {
     console.error('❌ Error listing documents:', error);
-    return res.status(500).json({
+    res.status(500).json({
       error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 }
 
-export default requireAuth(handler);
+// Apply authentication and error tracking
+const wrappedHandler = createErrorHandler(handler);
+export default requireAuth(wrappedHandler);
 
 // Configure API route
 export const config = {

@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import formidable, { File } from 'formidable';
 import { promises as fs } from 'fs';
 import { processDocument } from '../../../src/utils/documentProcessor';
+import { createErrorHandler } from '../../../src/services/sentry.service';
 
 /**
  * Serverless Document Processing API
@@ -23,16 +24,17 @@ import { processDocument } from '../../../src/utils/documentProcessor';
  *   - chunks: number of vectors created
  *   - message: status message
  */
-export default async function handler(
+async function handler(
   req: VercelRequest,
   res: VercelResponse
-) {
+): Promise<void> {
   // Only allow POST requests
   if (req.method !== 'POST') {
-    return res.status(405).json({
+    res.status(405).json({
       error: 'Method not allowed',
       message: 'Use POST to upload documents',
     });
+    return;
   }
 
   try {
@@ -41,10 +43,11 @@ export default async function handler(
     const expectedKey = process.env.CRON_SECRET;
 
     if (!adminKey || adminKey !== expectedKey) {
-      return res.status(401).json({
+      res.status(401).json({
         error: 'Unauthorized',
         message: 'Invalid admin key. Provide x-admin-key header.',
       });
+      return;
     }
 
     // Parse multipart form data using formidable
@@ -67,10 +70,11 @@ export default async function handler(
 
     // Check if file was uploaded
     if (!files.file || files.file.length === 0) {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'Bad Request',
         message: 'No file provided. Use "file" field in form data.',
       });
+      return;
     }
 
     const file = files.file[0] as File;
@@ -102,32 +106,38 @@ export default async function handler(
       // Don't fail the request if cleanup fails
     }
 
-    return res.status(200).json(result);
+    res.status(200).json(result);
+    return;
 
   } catch (error: any) {
     console.error('Document processing error:', error);
 
     // Handle specific errors
     if (error.code === 'LIMIT_FILE_SIZE') {
-      return res.status(413).json({
+      res.status(413).json({
         error: 'File too large',
         message: 'File size must be less than 5MB (Vercel limit)',
       });
+      return;
     }
 
     if (error.message && error.message.includes('mimetype')) {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'Invalid file type',
         message: 'Only PDF, Markdown, and Text files are supported',
       });
+      return;
     }
 
-    return res.status(500).json({
+    res.status(500).json({
       error: 'Processing failed',
       message: error.message || 'Unknown error occurred',
     });
   }
 }
+
+// Apply error tracking
+export default createErrorHandler(handler);
 
 // Configure API route - MUST disable bodyParser for file uploads
 export const config = {

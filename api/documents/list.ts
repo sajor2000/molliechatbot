@@ -1,7 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { supabaseService } from '../../src/services/supabase.service';
+import { createErrorHandler } from '../../src/services/sentry.service';
+import { requireAuth, type AuthRequest } from '../../src/middleware/auth.middleware';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+async function handler(req: AuthRequest, res: VercelResponse) {
   // Only allow GET requests
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -29,3 +31,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 }
+
+// Apply authentication and error tracking
+export default requireAuth(createErrorHandler(handler));

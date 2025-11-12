@@ -9,35 +9,45 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 const MAX_MESSAGE_LENGTH = 4000; // Maximum characters for chat message
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const ALLOWED_FILE_EXTENSIONS = [
-  '.pdf', '.txt', '.md', '.doc', '.docx',
+  '.pdf', '.docx', '.doc', '.txt', '.md',
   '.json', '.csv', '.xml', '.html'
 ];
 
 /**
- * Sanitize string input to prevent XSS
- * Removes/encodes potentially dangerous characters
+ * Sanitize string input for chat messages
+ * Removes dangerous characters while preserving readability
+ * Note: HTML encoding is handled by the frontend when rendering
  */
 export function sanitizeString(input: string): string {
   if (!input || typeof input !== 'string') {
     return '';
   }
 
-  // Remove null bytes
-  let sanitized = input.replace(/\0/g, '');
+  // Remove null bytes and control characters (except newlines and tabs)
+  let sanitized = input.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 
   // Trim whitespace
   sanitized = sanitized.trim();
 
-  // Encode HTML special characters to prevent XSS
-  sanitized = sanitized
+  return sanitized;
+}
+
+/**
+ * Sanitize string for HTML output (use in frontend rendering)
+ * Encodes HTML special characters to prevent XSS
+ */
+export function sanitizeForHTML(input: string): string {
+  if (!input || typeof input !== 'string') {
+    return '';
+  }
+
+  return input
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#x27;')
     .replace(/\//g, '&#x2F;');
-
-  return sanitized;
 }
 
 /**

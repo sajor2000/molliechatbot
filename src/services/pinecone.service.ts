@@ -95,6 +95,35 @@ export class PineconeService {
     const index = this.client.index(this.indexName);
     await index.deleteAll();
   }
+
+  /**
+   * Delete vectors by metadata filter
+   * Useful for cleaning up when documents are deleted
+   */
+  async deleteVectorsByMetadata(filter: Record<string, any>) {
+    try {
+      const index = this.client.index(this.indexName);
+      await index.deleteMany({ filter });
+      console.log(`✅ Deleted vectors matching filter:`, filter);
+    } catch (error) {
+      console.error('❌ Error deleting vectors by metadata:', error);
+      throw new Error('Failed to delete vectors from Pinecone');
+    }
+  }
+
+  /**
+   * Get index statistics (vector count, dimension, etc.)
+   */
+  async getIndexStats() {
+    try {
+      const index = this.client.index(this.indexName);
+      const stats = await index.describeIndexStats();
+      return stats;
+    } catch (error) {
+      console.error('❌ Error getting index stats:', error);
+      throw new Error('Failed to retrieve Pinecone index statistics');
+    }
+  }
 }
 
 export const pineconeService = new PineconeService();

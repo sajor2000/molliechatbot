@@ -26,8 +26,13 @@ function isOriginAllowed(origin: string | undefined, allowedOrigins: string[]): 
     return false;
   }
 
-  // Allow all origins if '*' is in the list
+  // SECURITY: NEVER allow '*' in production
   if (allowedOrigins.includes('*')) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('🔴 SECURITY ERROR: ALLOWED_ORIGINS=* is forbidden in production');
+      return false;
+    }
+    // Only allow wildcard in development
     return true;
   }
 
@@ -137,8 +142,8 @@ export function validateApiKey(
       });
     }
 
-    // TODO: Validate against stored API keys in KV
-    // For now, check against environment variable
+    // Validate against environment variable API keys
+    // Future enhancement: Can use KV storage for dynamic API key management
     const validApiKeys = process.env.VALID_API_KEYS?.split(',') || [];
 
     if (!validApiKeys.includes(apiKey)) {

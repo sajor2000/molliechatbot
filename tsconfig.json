@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "commonjs",
-    "lib": ["ES2020"],
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
@@ -13,5 +13,18 @@
     "moduleResolution": "node"
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "src/**/__tests__/**",
+    "src/**/*.test.ts",
+    "src/**/*.examples.ts",
+    "src/services/analytics.service.ts",
+    "src/services/mongodb.service.ts.unused",
+    "src/services/openrouter.service.ts.unused",
+    "src/services/scheduler.service.ts",
+    "src/services/storage.service.ts",
+    "src/routes/**/*",
+    "src/scripts/**/*",
+    "src/server.ts"
+  ]
 }

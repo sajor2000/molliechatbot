@@ -1,5 +1,6 @@
 import { kv } from '@vercel/kv';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 
 /**
  * KV-based Authentication Service
@@ -106,19 +107,13 @@ export class KVAuthService {
   }
 
   /**
-   * Generate secure random token
+   * Generate cryptographically secure random token
+   * Uses crypto.randomBytes instead of Math.random() for security
    */
   private createRandomToken(): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let token = '';
-
-    // Generate 32-character token
-    for (let i = 0; i < 32; i++) {
-      const randomIndex = Math.floor(Math.random() * chars.length);
-      token += chars[randomIndex];
-    }
-
-    return token;
+    // Generate 32 bytes (256 bits) of cryptographically secure random data
+    // Convert to base64url for URL-safe token (43 characters)
+    return crypto.randomBytes(32).toString('base64url');
   }
 
   /**

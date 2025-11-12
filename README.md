@@ -133,6 +133,9 @@ RESEND_API_KEY=your_resend_api_key_here
 MANAGER_EMAIL=manager@yourbusiness.com
 FROM_EMAIL=chatbot@yourdomain.com
 
+# Document upload processing mode (lite is serverless-friendly; docling for local batches)
+DOCUMENT_PROCESSOR=lite
+
 # Timezone for daily summary
 TIMEZONE=America/Chicago
 SUMMARY_TIME=05:30
@@ -169,6 +172,9 @@ mkdir documents
 ```bash
 npm run embed:docs
 ```
+
+> **Tip:** Vercel serverless functions default to the lightweight processor (`DOCUMENT_PROCESSOR=lite`) for day-to-day uploads.  
+> For the full Docling pipeline (better structured output), run the ingest scripts locally or set `DOCUMENT_PROCESSOR=docling` when you have the heavier dependencies available.
 
 This will:
 - Extract text from all documents

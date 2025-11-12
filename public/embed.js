@@ -16,9 +16,27 @@
 (function() {
   'use strict';
 
+  // Auto-detect API base URL
+  const getApiBaseUrl = () => {
+    // Check if running on localhost for development
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      return 'http://localhost:3000/api/chat';
+    }
+    // Production: Use the script's origin (where embed.js is hosted)
+    const scripts = document.getElementsByTagName('script');
+    for (let script of scripts) {
+      if (script.src && script.src.includes('embed.js')) {
+        const url = new URL(script.src);
+        return `${url.protocol}//${url.host}/api/chat`;
+      }
+    }
+    // Fallback: assume same origin as page
+    return `${window.location.protocol}//${window.location.host}/api/chat`;
+  };
+
   // Configuration - can be overridden via window.SHORELINE_CHAT_CONFIG
   const CONFIG = Object.assign({
-    apiBaseUrl: 'https://your-production-domain.com/api/chat', // UPDATE THIS IN PRODUCTION
+    apiBaseUrl: getApiBaseUrl(),
     brandName: 'Shoreline Dental Chicago',
     brandColor: '#2C5F8D', // Professional dental blue
     accentColor: '#4A90A4', // Lighter blue for hover states
@@ -297,6 +315,74 @@
     </div>
   `;
 
+  const STREAM_CONTENT_TYPE = 'text/event-stream';
+
+  function isStreamingResponse(response) {
+    const contentType = response.headers.get('content-type') || '';
+    return contentType.includes(STREAM_CONTENT_TYPE);
+  }
+
+  async function readStreamingResponse(response, handlers) {
+    if (!response.body || typeof response.body.getReader !== 'function') {
+      throw new Error('Streaming not supported in this browser.');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let streamClosed = false;
+
+    const processEvent = (eventChunk) => {
+      const sanitized = eventChunk.replace(/\r/g, '\n').trim();
+      if (!sanitized) return;
+
+      const lines = sanitized.split('\n').filter(Boolean);
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        const payload = line.slice(5).trim();
+        if (!payload) continue;
+
+        try {
+          const parsed = JSON.parse(payload);
+          if (parsed.type === 'token' && parsed.content) {
+            handlers.onToken?.(parsed.content);
+          } else if (parsed.type === 'done') {
+            handlers.onDone?.();
+          } else if (parsed.type === 'error') {
+            const message = parsed.error || 'Sorry, I encountered an error. Please try again.';
+            handlers.onError?.(message);
+            streamClosed = true;
+            return;
+          }
+        } catch (err) {
+          console.error('Failed to parse stream chunk:', err);
+        }
+      }
+    };
+
+    while (!streamClosed) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      let boundary = buffer.indexOf('\n\n');
+      while (boundary !== -1) {
+        const chunk = buffer.slice(0, boundary);
+        buffer = buffer.slice(boundary + 2);
+        processEvent(chunk);
+        if (streamClosed) {
+          await reader.cancel();
+          return;
+        }
+        boundary = buffer.indexOf('\n\n');
+      }
+    }
+
+    if (buffer.trim() && !streamClosed) {
+      processEvent(buffer);
+    }
+  }
+
   // Initialize widget
   function initWidget() {
     // Add styles
@@ -347,21 +433,82 @@
       typingIndicator.classList.add('active');
 
       try {
-        const response = await fetch(`${CONFIG.API_BASE_URL}/webhook`, {
+        const response = await fetch(`${CONFIG.apiBaseUrl}/webhook`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message, sessionId }),
         });
 
-        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(`HTTP error ${response.status}`);
+        }
 
-        if (data.sessionId) {
-          sessionId = data.sessionId;
+        const headerSession = response.headers.get('x-session-id');
+        if (headerSession) {
+          sessionId = headerSession;
           localStorage.setItem('mollieweb-chat-session-id', sessionId);
         }
 
-        typingIndicator.classList.remove('active');
-        addMessage('assistant', data.response);
+        if (isStreamingResponse(response)) {
+          const assistantMessage = addMessage('assistant', '');
+          const contentNode = assistantMessage?.querySelector('.mollieweb-message-content');
+          let assistantText = '';
+          let streamFinished = false;
+
+          await readStreamingResponse(response, {
+            onToken: (token) => {
+              assistantText += token;
+              if (contentNode) {
+                contentNode.textContent = assistantText;
+              }
+            },
+            onDone: () => {
+              streamFinished = true;
+              typingIndicator.classList.remove('active');
+              if (!assistantText && contentNode) {
+                const fallback = 'Thanks for your patience! Please try again.';
+                assistantText = fallback;
+                contentNode.textContent = fallback;
+              }
+            },
+            onError: (message) => {
+              streamFinished = true;
+              typingIndicator.classList.remove('active');
+              assistantText = message;
+              if (contentNode) {
+                contentNode.textContent = message;
+              }
+            },
+          }).catch((streamError) => {
+            console.error('Streaming error:', streamError);
+            if (contentNode) {
+              const fallback = 'Sorry, I encountered an error. Please try again.';
+              assistantText = fallback;
+              contentNode.textContent = fallback;
+            }
+            typingIndicator.classList.remove('active');
+            streamFinished = true;
+          });
+
+          if (!streamFinished) {
+            typingIndicator.classList.remove('active');
+            if (!assistantText && contentNode) {
+              const fallback = 'Thanks for your patience! Please try again.';
+              assistantText = fallback;
+              contentNode.textContent = fallback;
+            }
+          }
+        } else {
+          const data = await response.json();
+
+          if (data.sessionId) {
+            sessionId = data.sessionId;
+            localStorage.setItem('mollieweb-chat-session-id', sessionId);
+          }
+
+          typingIndicator.classList.remove('active');
+          addMessage('assistant', data.response || 'Sorry, I encountered an error. Please try again.');
+        }
       } catch (error) {
         console.error('Chat error:', error);
         typingIndicator.classList.remove('active');
@@ -398,13 +545,14 @@
 
       chatMessages.insertBefore(messageDiv, typingIndicator);
       chatMessages.scrollTop = chatMessages.scrollHeight;
+      return messageDiv;
     }
 
     // End session on page unload
     window.addEventListener('beforeunload', () => {
       if (sessionId) {
         navigator.sendBeacon(
-          `${CONFIG.API_BASE_URL}/end-session`,
+          `${CONFIG.apiBaseUrl}/end-session`,
           JSON.stringify({ sessionId })
         );
       }

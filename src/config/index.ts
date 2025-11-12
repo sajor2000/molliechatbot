@@ -79,18 +79,19 @@ export const config = {
     summaryTime: process.env.SUMMARY_TIME || '05:30',
   },
 
+  documentProcessing: {
+    mode: (process.env.DOCUMENT_PROCESSOR || 'lite').toLowerCase() === 'docling'
+      ? 'docling'
+      : 'lite',
+  },
+
   cronSecret: process.env.CRON_SECRET || '',
 
-  // MongoDB configuration (optional)
-  mongodbUri: process.env.MONGODB_URI || '',
-  mongodbDatabase: process.env.MONGODB_DATABASE || 'mollieweb',
-
-  // OpenRouter configuration (optional)
-  openrouter: {
-    apiKey: process.env.OPENROUTER_API_KEY || '',
-    model: process.env.OPENROUTER_MODEL || 'anthropic/claude-3.5-sonnet',
-    embeddingModel: process.env.EMBEDDING_MODEL || 'text-embedding-3-large',
-    embeddingDimensions: parseInt(process.env.EMBEDDING_DIMENSIONS || '1024', 10),
+  // Monitoring and Analytics
+  sentry: {
+    dsn: process.env.SENTRY_DSN || '',
+    tracesSampleRate: parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE || '0.1'),
+    profilesSampleRate: parseFloat(process.env.SENTRY_PROFILES_SAMPLE_RATE || '0.1'),
   },
 };
 

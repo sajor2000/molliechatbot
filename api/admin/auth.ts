@@ -1,21 +1,24 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { verifyPassword, generateToken } from '../../src/middleware/auth.middleware';
 import { rateLimitAuth } from '../../src/middleware/rate-limit.middleware';
+import { createErrorHandler } from '../../src/services/sentry.service';
 
-async function handler(req: VercelRequest, res: VercelResponse) {
+async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   // Only allow POST requests
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
   }
 
   try {
     const { password } = req.body;
 
     if (!password || typeof password !== 'string') {
-      return res.status(400).json({
+      res.status(400).json({
         error: 'Bad request',
         message: 'Password is required'
       });
+      return;
     }
 
     // Verify password using bcrypt
@@ -25,10 +28,11 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       // Add small delay to prevent brute force attacks (increased from 1s to 3s)
       await new Promise(resolve => setTimeout(resolve, 3000));
 
-      return res.status(401).json({
+      res.status(401).json({
         error: 'Unauthorized',
         message: 'Invalid password'
       });
+      return;
     }
 
     // Generate and store token in KV
@@ -36,7 +40,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log('✅ Admin authentication successful');
 
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
       token,
       expiresIn: 86400, // 24 hours in seconds
@@ -46,17 +50,19 @@ async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Hide internal error details in production
     if (process.env.NODE_ENV === 'production') {
-      return res.status(500).json({
+      res.status(500).json({
         error: 'Authentication failed'
       });
+      return;
     }
 
-    return res.status(500).json({
+    res.status(500).json({
       error: 'Internal server error',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 }
 
-// Apply rate limiting: 5 attempts per 15 minutes
-export default rateLimitAuth(handler);
+// Apply rate limiting and error tracking: 5 attempts per 15 minutes
+const wrappedHandler = createErrorHandler(handler);
+export default rateLimitAuth(wrappedHandler);

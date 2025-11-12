@@ -89,5 +89,10 @@
     "api/**/*.ts": {
       "maxDuration": 60
     }
+  },
+  "build": {
+    "env": {
+      "SENTRY_UPLOAD_SOURCE_MAPS": "true"
+    }
   }
 }

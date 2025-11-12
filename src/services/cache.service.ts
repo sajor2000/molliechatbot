@@ -43,10 +43,12 @@ export class CacheService {
 
       if (cached) {
         console.log(`✅ Cache hit for query: ${key}`);
+        await this.incrementCacheHit(); // Track cache hits
         return cached;
       }
 
       console.log(`⚠️ Cache miss for query: ${key}`);
+      await this.incrementCacheMiss(); // Track cache misses
       return null;
     } catch (error) {
       console.error('❌ Error getting cached query result:', error);
@@ -77,10 +79,12 @@ export class CacheService {
 
       if (cached) {
         console.log(`✅ Cache hit for embedding: ${key}`);
+        await this.incrementCacheHit(); // Track cache hits
         return cached;
       }
 
       console.log(`⚠️ Cache miss for embedding: ${key}`);
+      await this.incrementCacheMiss(); // Track cache misses
       return null;
     } catch (error) {
       console.error('❌ Error getting cached embedding:', error);
