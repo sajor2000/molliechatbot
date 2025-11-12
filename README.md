@@ -46,7 +46,7 @@ This project now supports **serverless deployment to Vercel** with MongoDB Atlas
 
 - 🧠 **RAG-powered chatbot** using Pinecone vector database
 - 📚 **Docling integration** for intelligent document chunking (PDF, TXT, MD)
-- 🤖 **OpenRouter integration** for AI responses and embeddings
+- 🤖 **OpenAI integration** for chat completions and embeddings
 - 💬 **Embeddable chat widget** for any website
 - 📤 **Document upload API** with automatic processing
 - 📧 **Daily email summaries** sent at 5:30 AM with AI-generated insights
@@ -71,7 +71,7 @@ This project now supports **serverless deployment to Vercel** with MongoDB Atlas
 └────────┬────────┘      └──────────────┘
          │
          ├────────────►┌──────────────┐
-         │             │  OpenRouter  │
+         │             │  OpenAI API  │
          │             │  (LLM + RAG) │
          │             └──────────────┘
          │
@@ -93,7 +93,7 @@ Before you begin, ensure you have:
 
 1. **Node.js** (v18 or higher)
 2. **Pinecone Account** - [Sign up here](https://www.pinecone.io/)
-3. **OpenRouter Account** - [Sign up here](https://openrouter.ai/)
+3. **OpenAI Account** - [Sign up here](https://platform.openai.com/)
 4. **Resend Account** - [Sign up here](https://resend.com/)
 
 ## Quick Start 🚀
@@ -124,9 +124,11 @@ PINECONE_API_KEY=your_pinecone_api_key_here
 PINECONE_INDEX_NAME=mollieweb-chatbot
 PINECONE_ENVIRONMENT=us-east-1-aws
 
-# OpenRouter Configuration
-OPENROUTER_API_KEY=your_openrouter_api_key_here
-OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
+# OpenAI Configuration
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-4o-mini
+EMBEDDING_MODEL=text-embedding-3-large
+EMBEDDING_DIMENSIONS=1024
 
 # Resend Email Configuration
 RESEND_API_KEY=your_resend_api_key_here
@@ -397,7 +399,7 @@ mollieweb/
 │   ├── services/
 │   │   ├── docling.service.ts    # Document processing & chunking
 │   │   ├── email.service.ts      # Resend email
-│   │   ├── openrouter.service.ts # LLM & embeddings
+│   │   ├── openai.service.ts     # LLM & embeddings
 │   │   ├── pinecone.service.ts   # Vector database
 │   │   ├── scheduler.service.ts  # Daily cron job
 │   │   └── storage.service.ts    # Chat history
@@ -461,10 +463,11 @@ Then re-run: `npm run embed`
 Edit `.env`:
 
 ```env
-# Available models at https://openrouter.ai/models
-OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
-OPENROUTER_MODEL=openai/gpt-4-turbo
-OPENROUTER_MODEL=meta-llama/llama-3.1-70b-instruct
+# Available models at https://platform.openai.com/docs/models
+OPENAI_MODEL=gpt-4o-mini
+OPENAI_MODEL=gpt-4o
+OPENAI_MODEL=gpt-4.1-mini
+EMBEDDING_MODEL=text-embedding-3-large
 ```
 
 ### Customize Widget Appearance
@@ -508,7 +511,7 @@ Edit `src/services/email.service.ts` in the `generateEmailHTML()` method.
 - Storage: Supabase (documents)
 - Scheduling: cron-job.org
 - Vector DB: Pinecone
-- AI: OpenRouter
+- AI: OpenAI
 - Email: Resend
 
 **Total Cost: $0/month** ✅
@@ -622,7 +625,7 @@ Run: `npm install`
 ## Cost Optimization 💰
 
 - **Pinecone**: Use serverless tier for low traffic
-- **OpenRouter**: Choose cost-effective models
+- **OpenAI**: Choose cost-effective models
 - **Resend**: Free tier includes 3,000 emails/month
 - **Hosting**: Start with free/cheap tier, scale as needed
 
@@ -639,4 +642,4 @@ MIT License - Feel free to use and modify for your projects.
 
 ---
 
-Built with ❤️ using Pinecone, OpenRouter, and Resend
+Built with ❤️ using Pinecone, OpenAI, and Resend

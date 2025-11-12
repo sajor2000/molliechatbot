@@ -10,12 +10,10 @@ import SYSTEM_PROMPT from '../config/system-prompt';
  * - Chat completions (gpt-4o-mini)
  * - Text embeddings (text-embedding-3-large with 1024 dimensions)
  *
- * Benefits over OpenRouter:
- * - 15-20% cost savings (no markup)
- * - Better rate limits (500 RPM vs 10 RPM)
- * - Faster response times (~100-200ms improvement)
- * - Single API key management
- * - Higher reliability for production
+ * Designed for:
+ * - Lower latency through direct API access
+ * - Single-provider API key management
+ * - Consistent production reliability
  */
 export class OpenAIService {
   private apiKey: string;

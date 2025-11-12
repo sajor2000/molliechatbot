@@ -20,7 +20,6 @@
     "src/**/*.examples.ts",
     "src/services/analytics.service.ts",
     "src/services/mongodb.service.ts.unused",
-    "src/services/openrouter.service.ts.unused",
     "src/services/scheduler.service.ts",
     "src/services/storage.service.ts",
     "src/routes/**/*",
