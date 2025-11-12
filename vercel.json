@@ -64,6 +64,10 @@
   ],
   "rewrites": [
     {
+      "source": "/",
+      "destination": "/widget.html"
+    },
+    {
       "source": "/admin",
       "destination": "/admin.html"
     },

@@ -1,5 +1,4 @@
 import { kv } from '@vercel/kv';
-import crypto from 'crypto';
 
 /**
  * Cache Service using Vercel KV
@@ -15,8 +14,27 @@ export class CacheService {
    * Generate cache key from query string
    */
   private generateCacheKey(prefix: string, query: string): string {
-    const hash = crypto.createHash('sha256').update(query).digest('hex');
+    const hash = this.hashString(query);
     return `${CACHE_PREFIX}${prefix}:${hash}`;
+  }
+
+  /**
+   * Lightweight, runtime-agnostic hash (cyrb53) to avoid Node crypto dependency
+   */
+  private hashString(value: string): string {
+    let h1 = 0xdeadbeef ^ value.length;
+    let h2 = 0x41c6ce57 ^ value.length;
+
+    for (let i = 0; i < value.length; i++) {
+      const ch = value.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+
+    return ((h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0')).toLowerCase();
   }
 
   /**

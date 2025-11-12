@@ -123,6 +123,7 @@ NODE_ENV=development
 PINECONE_API_KEY=your_pinecone_api_key_here
 PINECONE_INDEX_NAME=mollieweb-chatbot
 PINECONE_ENVIRONMENT=us-east-1-aws
+PINECONE_NAMESPACE=shoreline  # optional (defaults to "")
 
 # OpenAI Configuration
 OPENAI_API_KEY=your_openai_api_key_here
@@ -151,6 +152,7 @@ SUMMARY_TIME=05:30
    - **Dimensions**: `1536` (for OpenAI text-embedding-3-small)
    - **Metric**: `cosine`
    - **Environment**: Choose your preferred region
+3. (Optional) **Namespaces**: Set `PINECONE_NAMESPACE` to isolate tenants or environments. Each namespace gets its own logical vector space without needing a separate index.
 
 ### 4. Embed Your Knowledge Base
 

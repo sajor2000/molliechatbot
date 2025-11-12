@@ -129,11 +129,7 @@ async function handler(req: AuthRequest, res: VercelResponse) {
     }));
 
     // Upload to Pinecone in batches
-    const BATCH_SIZE = 100;
-    for (let i = 0; i < vectors.length; i += BATCH_SIZE) {
-      const batch = vectors.slice(i, Math.min(i + BATCH_SIZE, vectors.length));
-      await pineconeService.upsertEmbeddings(batch);
-    }
+    await pineconeService.upsertEmbeddings(vectors);
 
     // Clean up temp file
     await fs.unlink(file.filepath).catch(() => {});

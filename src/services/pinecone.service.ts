@@ -1,15 +1,35 @@
 import { Pinecone } from '@pinecone-database/pinecone';
 import { config } from '../config';
+import { PineconeMatch, PineconeMetadata } from '../types/api.types';
 
 export class PineconeService {
   private client: Pinecone;
   private indexName: string;
+  private namespace: string;
 
   constructor() {
     this.client = new Pinecone({
       apiKey: config.pinecone.apiKey,
     });
     this.indexName = config.pinecone.indexName;
+    this.namespace = config.pinecone.namespace || '';
+  }
+
+  /**
+   * Get Pinecone index scoped to configured namespace (if provided)
+   */
+  private getIndex() {
+    const index = this.client.index(this.indexName);
+    return this.namespace ? index.namespace(this.namespace) : index;
+  }
+
+  private mapMatch(match: any): PineconeMatch {
+    return {
+      id: match.id,
+      score: match.score ?? 0,
+      values: match.values,
+      metadata: match.metadata as PineconeMetadata | undefined,
+    };
   }
 
   /**
@@ -26,7 +46,6 @@ export class PineconeService {
       } else if (Array.isArray(value) && value.every(v => typeof v === 'string')) {
         flatMetadata[key] = value;
       } else if (typeof value === 'object' && value !== null) {
-        // Stringify complex objects for Pinecone compatibility
         flatMetadata[key] = JSON.stringify(value);
       }
     });
@@ -52,8 +71,19 @@ export class PineconeService {
         metadata: vector.metadata ? this.flattenMetadata(vector.metadata) : undefined
       }));
 
-      const index = this.client.index(this.indexName);
-      await index.upsert(sanitizedVectors);
+      if (sanitizedVectors.length === 0) {
+        console.warn('⚠️ No vectors to upsert after sanitization');
+        return;
+      }
+
+      const index = this.getIndex();
+      const batchSize = 100;
+
+      for (let i = 0; i < sanitizedVectors.length; i += batchSize) {
+        const batch = sanitizedVectors.slice(i, i + batchSize);
+        await index.upsert(batch);
+        console.log(`📦 Upserted batch ${i / batchSize + 1} (${batch.length} vectors) into namespace "${this.namespace || 'default'}"`);
+      }
     } catch (error) {
       console.error('❌ Error upserting to Pinecone:', error);
 
@@ -69,15 +99,15 @@ export class PineconeService {
     }
   }
 
-  async queryEmbeddings(queryVector: number[], topK: number = 5) {
+  async queryEmbeddings(queryVector: number[], topK: number = 5): Promise<PineconeMatch[]> {
     try {
-      const index = this.client.index(this.indexName);
+      const index = this.getIndex();
       const queryResponse = await index.query({
         vector: queryVector,
         topK,
         includeMetadata: true,
       });
-      return queryResponse.matches || [];
+      return (queryResponse.matches || []).map(match => this.mapMatch(match));
     } catch (error) {
       console.error('❌ Error querying Pinecone:', error);
 
@@ -92,7 +122,7 @@ export class PineconeService {
   }
 
   async deleteAll() {
-    const index = this.client.index(this.indexName);
+    const index = this.getIndex();
     await index.deleteAll();
   }
 
@@ -102,7 +132,7 @@ export class PineconeService {
    */
   async deleteVectorsByMetadata(filter: Record<string, any>) {
     try {
-      const index = this.client.index(this.indexName);
+      const index = this.getIndex();
       await index.deleteMany({ filter });
       console.log(`✅ Deleted vectors matching filter:`, filter);
     } catch (error) {

@@ -116,24 +116,41 @@ export class SupabaseDatabaseService {
     content: string;
     createdAt?: Date;
   }): Promise<void> {
+    await this.saveChatMessages([entry]);
+  }
+
+  /**
+   * Batch insert multiple chat history rows in a single request
+   */
+  async saveChatMessages(entries: Array<{
+    sessionId: string;
+    role: ChatMessage['role'];
+    content: string;
+    createdAt?: Date;
+  }>): Promise<void> {
+    if (!entries.length) {
+      return;
+    }
+
     const client = this.ensureClient();
 
     try {
+      const payload = entries.map(entry => ({
+        session_id: entry.sessionId,
+        role: entry.role,
+        content: entry.content,
+        created_at: (entry.createdAt || new Date()).toISOString(),
+      }));
+
       const { error } = await client
         .from(this.chatHistoryTable)
-        .insert({
-          session_id: entry.sessionId,
-          role: entry.role,
-          content: entry.content,
-          created_at: (entry.createdAt || new Date()).toISOString(),
-        });
+        .insert(payload, { defaultToNull: false });
 
       if (error) {
         throw new Error(`Supabase chat history error: ${error.message}`);
       }
     } catch (error) {
-      // Don't disrupt chat flow if history persistence fails
-      console.error('Error saving chat message to history:', error);
+      console.error('Error saving chat history batch:', error);
     }
   }
 

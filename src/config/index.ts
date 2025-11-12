@@ -1,10 +1,3 @@
-import * as dotenv from 'dotenv';
-
-// Only load .env file in development (Vercel provides env vars natively)
-if (process.env.NODE_ENV !== 'production') {
-  dotenv.config();
-}
-
 /**
  * Production Environment Validation
  * Validates that all required environment variables are present
@@ -55,6 +48,7 @@ export const config = {
     indexName: process.env.PINECONE_INDEX_NAME || 'mollieweb-chatbot',
     environment: process.env.PINECONE_ENVIRONMENT || 'us-east-1-aws',
     host: process.env.PINECONE_HOST || '',
+    namespace: process.env.PINECONE_NAMESPACE || '',
   },
 
   openai: {

@@ -57,8 +57,8 @@ export interface OpenAIChatCompletionResponse {
 // ============================================================================
 
 export interface PineconeMetadata {
-  text: string;
-  source: string;
+  text?: string;
+  source?: string;
   chunkIndex?: number;
   totalChunks?: number;
   pageNumber?: number;

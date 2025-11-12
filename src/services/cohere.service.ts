@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { config } from '../config';
 
 /**
@@ -30,6 +29,13 @@ export class CohereService {
 
   constructor() {
     this.apiKey = config.cohere.apiKey;
+  }
+
+  private get headers(): Record<string, string> {
+    return {
+      'Authorization': `Bearer ${this.apiKey}`,
+      'Content-Type': 'application/json',
+    };
   }
 
   /**
@@ -65,25 +71,27 @@ export class CohereService {
 
       console.log(`🔄 Reranking ${documents.length} documents with Cohere...`);
 
-      const response = await axios.post(
-        `${this.baseURL}/rerank`,
-        {
+      const response = await fetch(`${this.baseURL}/rerank`, {
+        method: 'POST',
+        headers: this.headers,
+        body: JSON.stringify({
           model: 'rerank-english-v3.0',
           query,
           documents: documents.map(doc => doc.text),
           top_n: topN,
-          return_documents: false, // We already have the documents
-        },
-        {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+          return_documents: false,
+        }),
+      });
 
-      // Map Cohere's results back to our documents with relevance scores
-      const results: RerankResult[] = response.data.results.map((result: any) => ({
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Cohere rerank error:', response.status, errorText);
+        return this.createFallbackResults(documents, topN);
+      }
+
+      const data = await response.json();
+
+      const results: RerankResult[] = data.results.map((result: any) => ({
         index: result.index,
         relevanceScore: result.relevance_score,
         document: documents[result.index],

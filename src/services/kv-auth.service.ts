@@ -25,7 +25,7 @@ export class KVAuthService {
       const tokenHash = await bcrypt.hash(token, SALT_ROUNDS);
 
       // Store token hash in KV with 24-hour expiration
-      const key = `${TOKEN_PREFIX}${token}`;
+      const key = this.createLookupKey(token);
       await kv.set(key, {
         hash: tokenHash,
         createdAt: Date.now(),
@@ -48,7 +48,7 @@ export class KVAuthService {
         return false;
       }
 
-      const key = `${TOKEN_PREFIX}${token}`;
+      const key = this.createLookupKey(token);
       const tokenData = await kv.get<{
         hash: string;
         createdAt: number;
@@ -61,11 +61,12 @@ export class KVAuthService {
 
       // Check if token has expired (double-check even though KV should auto-delete)
       if (Date.now() > tokenData.expiresAt) {
-        await this.revokeToken(token);
+        await kv.del(key);
         return false;
       }
 
-      return true;
+      const matches = await bcrypt.compare(token, tokenData.hash);
+      return matches;
     } catch (error) {
       console.error('Error verifying token:', error);
       return false;
@@ -77,7 +78,7 @@ export class KVAuthService {
    */
   async revokeToken(token: string): Promise<boolean> {
     try {
-      const key = `${TOKEN_PREFIX}${token}`;
+      const key = this.createLookupKey(token);
       await kv.del(key);
       return true;
     } catch (error) {
@@ -129,7 +130,7 @@ export class KVAuthService {
    */
   async extendToken(token: string): Promise<boolean> {
     try {
-      const key = `${TOKEN_PREFIX}${token}`;
+      const key = this.createLookupKey(token);
       const tokenData = await kv.get<{
         hash: string;
         createdAt: number;
@@ -149,6 +150,11 @@ export class KVAuthService {
       console.error('Error extending token:', error);
       return false;
     }
+  }
+
+  private createLookupKey(token: string): string {
+    const digest = crypto.createHash('sha256').update(token).digest('hex');
+    return `${TOKEN_PREFIX}${digest}`;
   }
 }
 
