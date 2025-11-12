@@ -101,24 +101,21 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
     // Log top similarity scores for debugging
     if (contextMatches.length > 0) {
       logger.rag('Top similarity scores', {
-        topScores: contextMatches.slice(0, 3).map((m: PineconeMatch) => ({
-          score: m.score.toFixed(3),
-          source: m.metadata?.source?.substring(0, 50),
-          preview: m.metadata?.text?.substring(0, 80) + '...'
-        }))
+        chunks: contextMatches.length,
+        similarityScore: contextMatches[0]?.score
       });
     }
 
     // RAG BEST PRACTICE 2: Similarity threshold filtering (prevent irrelevant results)
     const SIMILARITY_THRESHOLD = 0.60; // Lowered to retrieve more relevant context for reranking
     const relevantMatches = contextMatches.filter(
-      (match: PineconeMatch): boolean => match.score >= SIMILARITY_THRESHOLD
+      (match: PineconeMatch): boolean => (match.score ?? 0) >= SIMILARITY_THRESHOLD
     );
 
     logger.rag(`Retrieved chunks: ${contextMatches.length}, relevant: ${relevantMatches.length}`, {
       chunks: contextMatches.length,
-      relevantChunks: relevantMatches.length,
-      threshold: SIMILARITY_THRESHOLD
+      similarityScore: relevantMatches[0]?.score,
+      reranked: false
     });
     addBreadcrumb('Vector search completed', {
       chunksRetrieved: contextMatches.length,
@@ -127,7 +124,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
     }, 'rag', 'info');
 
     // RAG BEST PRACTICE 3: Cohere Reranking for improved context selection
-    let finalMatches: RAGMatch[] = relevantMatches;
+    let finalMatches: RAGMatch[] = relevantMatches as RAGMatch[];
     if (relevantMatches.length > 0) {
       const documentsToRerank: CohereDocument[] = relevantMatches.map((match: PineconeMatch) => ({
         text: match.metadata?.text || '',
@@ -139,14 +136,16 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       finalMatches = rerankedResults.map((result: CohereRerankResult): RAGMatch => {
         const originalMatch = relevantMatches[result.index];
         return {
-          ...originalMatch,
+          id: originalMatch.id,
           score: result.relevanceScore,
+          metadata: originalMatch.metadata,
         };
       });
 
       logger.rag(`Reranked to top 3`, {
-        topScore: rerankedResults[0]?.relevanceScore.toFixed(3),
-        resultsCount: rerankedResults.length
+        chunks: rerankedResults.length,
+        similarityScore: rerankedResults[0]?.relevanceScore,
+        reranked: true
       });
       addBreadcrumb('Cohere reranking completed', {
         topScore: rerankedResults[0]?.relevanceScore,

@@ -107,9 +107,9 @@ async function handler(req: AuthRequest, res: VercelResponse) {
 
     logger.document(`Embeddings generated`, {
       filename: originalName,
-      total: embeddings.length,
-      cached: cachedCount,
-      generated: generatedCount,
+      chunks: embeddings.length,
+      size: cachedCount + generatedCount,
+      vectors: embeddings.length
     });
 
     // Create vectors with embeddings
